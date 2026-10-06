@@ -1,0 +1,93 @@
+name: Build and test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build Linux x86-64
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CGO_ENABLED: '0'
+      GOOS: linux
+      GOARCH: amd64
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          # This standard-library-only project has no go.sum to cache.
+          cache: false
+
+      - name: Build executable and checksum
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            if [[ ! "$GITHUB_REF_NAME" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+              echo "::error::Release tags must use vMAJOR.MINOR.PATCH, for example v0.1.0"
+              exit 1
+            fi
+            make checksum VERSION="$GITHUB_REF_NAME"
+          else
+            make checksum
+          fi
+
+      - name: Smoke test executable
+        run: |
+          ./bin/myarch-buildkit --version
+          ./bin/myarch-buildkit --help
+          ./bin/myarch-buildkit plan
+          cd bin
+          sha256sum -c SHA256SUMS
+
+      - name: Package download
+        run: |
+          mkdir -p dist
+          tar -czf dist/myarch-buildkit-linux-x86_64.tar.gz \
+            -C bin myarch-buildkit SHA256SUMS \
+            -C "$GITHUB_WORKSPACE" LICENSE docs/user-guide.md
+
+      - name: Upload executable bundle
+        uses: actions/upload-artifact@v6
+        with:
+          name: myarch-buildkit-linux-x86_64
+          path: dist/myarch-buildkit-linux-x86_64.tar.gz
+          if-no-files-found: error
+          retention-days: 30
+
+  test:
+    name: Test and vet
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: stable
+          cache: false
+
+      - name: Static analysis
+        run: make vet
+
+      # Keep failures visible without blocking the independent build job.
+      - name: Run tests
+        run: make test

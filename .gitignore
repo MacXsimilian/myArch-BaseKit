@@ -1,0 +1,63 @@
+# Editor settings and temporary files
+.vscode/
+*.code-workspace
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Local AI assistant settings, instructions, and session data
+.codex/
+.openai/
+.agents/
+AGENTS.md
+AGENTS.override.md
+.claude/
+.claude.json
+.claude.json.*
+CLAUDE.md
+CLAUDE.local.md
+.mcp.json
+.cursor/
+.cursorrules
+.aider*
+.continue/
+
+# Local environment variables and credentials (keep shareable templates)
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+.envrc
+.direnv/
+.aws/
+.ssh/
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Go build, test, and profiling output
+/myarch-buildkit
+/myarch-buildkit.exe
+/myArch-BaseKit
+/myArch-BaseKit.exe
+/bin/
+/dist/
+/build/
+*.test
+*.test.exe
+/coverage/
+/coverage.out
+/coverage.html
+*.prof
+/go.work
+/go.work.sum
+
+# Installer reports and personal settings
+/myarch-buildkit-runs/
+/myarch-buildkit-settings.json
+*.log
