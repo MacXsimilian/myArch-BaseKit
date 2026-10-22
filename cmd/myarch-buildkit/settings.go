@@ -31,6 +31,7 @@ var GroupOrder = []string{"core", "utilities", "development", "containers"}
 func DefaultSettings() Settings {
 	return Settings{
 		SchemaVersion: 2,
+		KernelChannel: "unchanged",
 		PackageGroups: map[string]bool{
 			"core":        true,
 			"utilities":   true,
@@ -107,6 +108,9 @@ func LoadSettings(path string) (Settings, error) {
 				return settings, fmt.Errorf("laptop.%s cannot be null", key)
 			}
 		}
+	}
+	if !contains([]string{"unchanged", "stable", "rc"}, settings.KernelChannel) {
+		return settings, errors.New("kernel_channel must be unchanged, stable or rc")
 	}
 	if settings.SchemaVersion != 2 {
 		return settings, errors.New("settings schema_version must be 2")

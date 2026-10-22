@@ -156,6 +156,13 @@ func planTextWidth(o Options, s Settings, stages []string, color bool, width int
 		for _, row := range rows {
 			counts[row.Groups[0]]++
 		}
+		v.section("Kernel")
+		v.field("Channel", kernelChannel(s))
+		if target := kernelPackage(s); target != "" {
+			v.field("Target", target+" + matching headers and required prebuilt modules")
+			v.note("Retain a validated stable/LTS fallback. Active systemd-boot with standard entries required; Secure Boot and DKMS need manual validation.")
+			v.note("Versions remain unresolved until apply refreshes repositories. No boot default promotion or reboot occurs automatically.")
+		}
 		v.section("Packages")
 		fmt.Fprintf(&v.Builder, "  %-15s%13s  %s\n", "Group", "Requirements", "Included tools")
 		descriptions := map[string]string{
@@ -449,5 +456,15 @@ func PrintPlan(o Options, s Settings) error {
 		return err
 	}
 	_, err = fmt.Fprint(os.Stdout, planTextWidth(o, s, stages, planHasColor(), planTerminalWidth()))
-	return err
+	if err != nil {
+		return err
+	}
+	if kernelPackage(s) != "" && contains(stages, "packages") {
+		c, err := NewContext("", s, o, nil)
+		if err != nil {
+			return err
+		}
+		fmt.Fprint(os.Stdout, kernelPlanObservation(c))
+	}
+	return nil
 }

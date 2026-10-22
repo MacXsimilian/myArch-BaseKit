@@ -40,6 +40,15 @@ func checkText(o Options, c *Context, checkErr error) string {
 		checkContainerDetails(v, containers)
 	}
 
+	if kernel := object(report["kernel"]); len(kernel) > 0 {
+		v.section("Kernel")
+		for _, key := range []string{"channel", "running", "installed_release", "installed_version", "cached_available_version", "fallback", "entry", "reboot_required", "default"} {
+			if value, ok := kernel[key]; ok {
+				v.field(key, fmt.Sprint(value))
+			}
+		}
+		v.note("Repository versions are cached and provisional. Kernel changes require a manual reboot; configuration restore does not undo packages.")
+	}
 	checkDefaultApps(v, report, o.Details)
 
 	pending := object(report["pending_configuration"])

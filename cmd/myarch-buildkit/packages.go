@@ -386,6 +386,12 @@ func InstallPackages(c *Context, group string, bootstrapped bool) error {
 		return errors.New("selected package manifest is empty or disabled")
 	}
 	// Refresh and upgrade once, before resolving packages against the new databases.
+	if !bootstrapped && kernelChannel(c.Settings) != "unchanged" {
+		if err := UpgradeKernel(c); err != nil {
+			return err
+		}
+		bootstrapped = true
+	}
 	if !bootstrapped {
 		if _, err := c.Command(Command{Args: []string{"sudo", "pacman", "-Syu", "--needed", "--", "base-devel", "git"}, Interactive: true}); err != nil {
 			return err

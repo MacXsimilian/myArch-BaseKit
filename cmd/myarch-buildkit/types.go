@@ -10,6 +10,7 @@ import (
 )
 
 type Settings struct {
+	KernelChannel string          `json:"kernel_channel"`
 	SchemaVersion int             `json:"schema_version"`
 	PackageGroups map[string]bool `json:"package_groups"`
 	Laptop        LaptopSettings  `json:"laptop"`
@@ -22,6 +23,7 @@ type LaptopSettings struct {
 }
 
 type Options struct {
+	KernelBoot         string
 	Command            string
 	SettingsPath       string
 	PackageGroup       string

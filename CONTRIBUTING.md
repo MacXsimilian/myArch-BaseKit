@@ -20,7 +20,7 @@ All application code is in `cmd/myarch-buildkit/`:
 | --- | --- |
 | `main.go`, `settings.go`, `types.go` | CLI dispatch, settings, shared types |
 | `plan.go`, `plan_names.go`, `check_output.go`, `run_output.go` | Preview and terminal output |
-| `packages.go`, `defaults.go`, `integrations.go`, `cleanup.go` | Packages, application defaults, shell/container integrations, cleanup |
+| `packages.go`, `kernel.go`, `defaults.go`, `integrations.go`, `cleanup.go` | Packages, application defaults, shell/container integrations, cleanup |
 | `desktop.go`, `laptop.go`, `greeter.go`, `plugins.go`, `launchers.go`, `helpers.go` | Desktop, laptop preferences, login, plugins, and helpers |
 | `staging.go`, `storage.go`, `report_store.go`, `system.go` | Pending configuration, backups, reports, privileged operations |
 | `runner.go`, `parser.go` | Command execution and configuration parsing |
@@ -51,12 +51,12 @@ Use stable tags in the form `vMAJOR.MINOR.PATCH` (without leading zeroes). Tags 
 ## Release procedure
 
 1. Prepare the intended version and documentation on a branch, review the changes, and merge to `master`. Wait for all checks on that commit to pass. Run target-machine validation described in the user guide; CI does not exercise a real desktop session.
-2. From a clean checkout of that exact commit, validate and build the release (replace `v0.2.0` with the intended version):
+2. From a clean checkout of that exact commit, validate and build the release (replace `v0.3.0` with the intended version):
 
    ```bash
    make check
-   make release-check VERSION=v0.2.0
-   CGO_ENABLED=0 GOOS=linux GOARCH=amd64 make package VERSION=v0.2.0
+   make release-check VERSION=v0.3.0
+   CGO_ENABLED=0 GOOS=linux GOARCH=amd64 make package VERSION=v0.3.0
    ./bin/myarch-buildkit --version
    (cd dist && sha256sum -c SHA256SUMS)
    ```
@@ -64,8 +64,8 @@ Use stable tags in the form `vMAJOR.MINOR.PATCH` (without leading zeroes). Tags 
 3. Create an annotated tag and push that tag only:
 
    ```bash
-   git tag -a v0.2.0 -m 'Release v0.2.0'
-   git push origin v0.2.0
+   git tag -a v0.3.0 -m 'Release v0.3.0'
+   git push origin v0.3.0
    ```
 
 4. Watch the tag's **Build and test** run. The build validates the version, embeds the tag, extracts and smoke-tests the packaged CLI, and uploads the archive and checksums. Publication waits for every build, test, and lint job to pass. The release job downloads that run's artifact, verifies its checksum, creates a draft with generated notes and both assets, then publishes it. Only this job receives `contents: write`; it uses the built-in `GITHUB_TOKEN`, with no personal token or repository secret required.

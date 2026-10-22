@@ -27,6 +27,7 @@ Usage:
   ./myarch-buildkit --restore-stage desktop --stage-run-dir /absolute/stage/folder
 
 Options:
+  --kernel-boot ACTION     Standalone: once (trial boot) or promote (after testing)
   --settings PATH          Settings JSON (schema 2)
   --stage NAME             Select a stage; repeat as needed
   --package-group NAME     Select core/utilities/development/containers
@@ -102,12 +103,14 @@ func ParseOptions(args []string) (Options, error) {
 			o.EnablePodmanSocket = true
 		case "--allow-live-desktop":
 			return o, errors.New("--allow-live-desktop was removed; use staged next-login application")
-		case "--settings", "--stage", "--package-group", "--restore-stage", "--stage-run-dir", "--restore-profile", "--laptop-scale", "--remove-notes", "--cancel-pending":
+		case "--kernel-boot", "--settings", "--stage", "--package-group", "--restore-stage", "--stage-run-dir", "--restore-profile", "--laptop-scale", "--remove-notes", "--cancel-pending":
 			v, err := value(&i, arg)
 			if err != nil {
 				return o, err
 			}
 			switch arg {
+			case "--kernel-boot":
+				o.KernelBoot = v
 			case "--settings":
 				o.SettingsPath = v
 			case "--stage":
@@ -162,6 +165,11 @@ func ParseOptions(args []string) (Options, error) {
 	for _, note := range o.RemoveNotes {
 		if !contains([]string{"gnote", "bijiben", "knotes", "xpad"}, note) {
 			return o, fmt.Errorf("unsupported notes package: %s", note)
+		}
+	}
+	if o.KernelBoot != "" {
+		if !contains([]string{"once", "promote"}, o.KernelBoot) || commandSet || o.Command != "apply" || o.DryRun || o.Check || hasApplyOptions(o) || o.RestoreStage != "" || o.RestoreProfile != "" || o.CancelPending != "" || o.StageRunDir != "" || o.Help || o.Version || o.SettingsTemplate {
+			return o, errors.New("--kernel-boot once|promote must be standalone, optionally with --settings")
 		}
 	}
 	restoring := o.RestoreStage != "" || o.RestoreProfile != ""
@@ -346,6 +354,9 @@ func checkAll(c *Context) error {
 		checks = append(checks, namedCheck{"containers", CheckContainers})
 	}
 	checks = append(checks, namedCheck{"profile", observeProfile})
+	if kernelChannel(c.Settings) != "unchanged" {
+		checks = append(checks, namedCheck{"kernel", CheckKernel})
+	}
 	results := map[string]any{}
 	c.Report["check_results"] = results
 	for _, check := range checks {
@@ -883,6 +894,12 @@ func dispatch(args []string, runner Runner) (int, error) {
 		return 2, err
 	}
 	defer unlock()
+	if o.KernelBoot != "" {
+		if err := KernelBoot(c, o.KernelBoot); err != nil {
+			return 2, err
+		}
+		return 0, nil
+	}
 	if o.CancelPending != "" {
 		if err := CancelMissingPending(c, o.CancelPending); err != nil {
 			return 2, err

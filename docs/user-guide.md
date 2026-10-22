@@ -1,7 +1,7 @@
 # myArch-BaseKit: User Guide
 
 Practical setup and daily-use reference\
-Documented build: **v0.2.0**\
+Documented build: **v0.3.0**\
 Documentation date: **6 October 2026**
 
 **Current required base: CachyOS on x86_64 with Hyprland already installed and running.** Regular Arch Linux, EndeavourOS and other distributions are not supported by this release. The installer currently checks for CachyOS explicitly.
@@ -202,6 +202,8 @@ A laptop-only stage needs either an existing myarch-buildkit desktop profile tha
 | `internal_keyboard` | `"hu"` | Hungarian internal keyboard layout |
 | `natural_scroll` | `true` | Natural scrolling for pointer/touchpad policy |
 
+The top-level `kernel_channel` defaults to `"unchanged"`; opt into `"stable"` or `"rc"` as described in [kernel selection](#latest-cachyos-release-candidate-kernel).
+
 The template uses `schema_version: 2`. All four package groups are enabled by default; `core` must remain enabled. Partial settings are merged with defaults; unknown keys are rejected. There are no arbitrary per-application switches. Disabling a group does not uninstall its existing packages.
 
 The default scale is 4/3. A settings-file scale or `--laptop-scale` explicitly overrides it. Unsupported scales are reported rather than silently substituted. Settings from older builds must drop the removed refresh, external-display, power, lid and idle keys; unknown keys are rejected.
@@ -302,23 +304,59 @@ Cleanup removes Dolphin when Files is available; Alacritty when Ghostty and Hypr
 
 Selected camera diagnostics, Avahi browsers, hardware-topology and Qt/GTK settings launchers are hidden using reversible per-user overrides. Their packages remain installed. Cleanup does not remove every unfamiliar app, purge orphan packages, or uninstall Noctalia itself.
 
-### Planned: latest CachyOS release-candidate kernel
+### Latest CachyOS release-candidate kernel
 
-**Status: proposal, not implemented in v0.2.0.** The current full-system upgrade updates installed kernel packages through the enabled repositories, but the installer does not select an RC kernel, manage kernel fallback entries, or change the default boot kernel. The settings and behavior below are proposed, not available commands or configuration fields.
+Kernel selection is opt-in. Add the top-level setting `"kernel_channel": "rc"` to your settings JSON. Allowed values are `unchanged` (the default, preserving the existing full-upgrade behavior), `stable` (select `linux-cachyos`), and `rc` (select `linux-cachyos-rc`). Old settings and saved reports without this field retain `unchanged` behavior. The selected channel is retained in your settings file and saved run snapshots; it does not schedule updates.
 
-The proposed target is `linux-cachyos-rc`, which CachyOS describes as tracking the latest mainline kernel. “Latest” would mean the newest compatible package available from the enabled official CachyOS repositories at apply time; it would not guarantee the newest upstream release candidate is already packaged. See the [CachyOS kernel variants](https://wiki.cachyos.org/features/kernel/#variants).
+“Latest” means the version available from the enabled CachyOS repositories when apply refreshes package databases. The RC package follows mainline development and may contain a release candidate or a release-transition build; the installer does not hardcode a kernel version or promise an upstream release that CachyOS has not packaged. See [CachyOS kernel variants and module support](https://wiki.cachyos.org/features/kernel/).
 
-Implementation plan:
+#### Supported automatic path
 
-1. **Explicit channel selection.** Add an opt-in kernel channel with `unchanged`, `stable`, and `rc` choices. Existing settings would retain current behavior. Selecting RC would persist the preference for later installer runs; it would not schedule updates.
-2. **Preflight checks.** Detect installed kernels, the bootloader, boot partition mounts and free space, Secure Boot, and required NVIDIA, ZFS, or DKMS modules. Resolve compatible modules before installation and block activation if compatibility cannot be established. CachyOS notes that external NVIDIA modules can lag kernel releases; see [NVIDIA module support](https://wiki.cachyos.org/features/kernel/#nvidia).
-3. **Runtime package resolution.** Select the latest available RC kernel, matching headers, and required modules without hardcoded versions. Report unavailable or incompatible packages explicitly. Handle release transitions without silently downgrading to an older RC or claiming an unavailable upstream build was installed.
-4. **Full-system upgrade integration.** Extend `packages.go` with kernel-specific logic in a new `kernel.go`. Install through the existing full-upgrade flow, retain a stable or LTS fallback and its boot entry, and update the RC package on subsequent runs.
-5. **Boot validation and activation.** Verify generated initramfs files, required modules, and boot entries. Offer a one-time RC boot where supported, followed by explicit promotion after a successful boot. Keep reboot manual and provide manual instructions for unsupported bootloader configurations.
-6. **Status and recovery.** Extend `plan` and `check` to distinguish the running kernel, installed RC version, fallback kernel, and reboot requirement. Keep `plan` read-only and network-free, identifying cached version information as provisional until apply refreshes repositories. Document recovery by booting the fallback; configuration restore would not undo kernel package transactions.
-7. **Validation before release.** Test channel/settings compatibility, version selection, unavailable modules, failed installation hooks, repeated runs, and fallback preservation. Run the Go test suite and vet, then verify installation and reboot in a CachyOS VM. Hardware-specific module and boot behavior would still require target-machine validation.
+This implementation requires the **active systemd-boot loader**, Secure Boot disabled, and standard Type 1 entries referencing `vmlinuz-PACKAGE` and `initramfs-PACKAGE.img`. The boot partition must be mounted at `/boot`, `/efi`, or `/boot/efi`, with readable images and at least 1 GiB available on both that partition and the filesystem containing `/boot`.
 
-RC kernels are development releases. The proposed policy is to track the latest official CachyOS RC package while retaining a bootable stable or LTS fallback.
+Before opting in, install and boot a stable/LTS fallback using the CachyOS kernel manager. The installer requires an existing, verifiable `linux-cachyos-lts`, `linux-lts`, `linux-cachyos`, or `linux` entry; it never removes that package. An initramfs fallback image of the RC kernel itself is not a separate stable kernel.
+
+GRUB, Limine, rEFInd, unified kernel images, custom entry layouts, enabled/unknown Secure Boot, and DKMS drivers require manual kernel/boot validation. Automatic selection stops before changing installed packages when these conditions cannot be verified. Use the [CachyOS kernel manager](https://wiki.cachyos.org/features/kernel_manager/) and [boot-manager instructions](https://wiki.cachyos.org/configuration/boot_manager_configuration/) for those systems; retain a stable/LTS entry, select the new kernel manually from the boot menu, and test it before changing the default. Do not disable Secure Boot simply to bypass this check.
+
+NVIDIA and ZFS installations require the corresponding prebuilt target-kernel modules from CachyOS. The installed NVIDIA open/closed driver family is retained. Package dependency resolution must succeed, and module vermagic must match the installed kernel before boot activation. DKMS builds and ambiguous/legacy NVIDIA providers are deliberately not inferred to be compatible.
+
+#### Install, trial boot, then promote
+
+After editing your settings file:
+
+```bash
+./myarch-buildkit plan --stage packages --settings myarch-buildkit-settings.json
+./myarch-buildkit apply --stage packages --settings myarch-buildkit-settings.json
+./myarch-buildkit check --settings myarch-buildkit-settings.json
+```
+
+The packages stage performs kernel selection once per run, including when a single package group is selected. `--configure-only` skips kernel installation. Preview reads local inventory only; cached repository versions are provisional. Check reports the running release, installed target release/version, fallback entry, and whether a reboot is required.
+
+Apply first validates the current fallback, boot environment, space, and driver requirements. It refreshes/downloads a full system upgrade, resolves the exact kernel, matching headers and prebuilt driver packages, then downloads the selected transaction before installing it with a full upgrade. No AUR kernel or version downgrade is selected. If resolution fails after refresh, complete a full `sudo pacman -Syu` before other package installations; do not perform a partial upgrade against refreshed databases.
+
+The validated fallback is made the default and any old one-time selection is cleared before installation. Package hooks generate boot images/entries. Afterward, both target and fallback images are checked against the installed kernel files, initramfs contents must contain the matching kernel release, required modules must match, and the fallback entry must still be the default. A successful pacman exit alone is insufficient. If verification fails, repair the reported problem before rebooting.
+
+Request a trial boot explicitly:
+
+```bash
+./myarch-buildkit --kernel-boot once --settings myarch-buildkit-settings.json
+```
+
+This revalidates the installed images and modules, keeps the fallback as default, and selects the target for **one boot**. Save work and reboot manually. Confirm `uname -r`, then test graphics, networking, storage, suspend/resume, and your Hyprland session. When satisfied:
+
+```bash
+./myarch-buildkit --kernel-boot promote --settings myarch-buildkit-settings.json
+```
+
+Promotion requires that systemd-boot reports the selected entry as the current boot and `uname -r` matches the currently installed target kernel. It changes the default without rebooting. The command is an explicit user decision after testing; it does not claim to automatically validate hardware. See [bootctl's boot selection commands](https://www.freedesktop.org/software/systemd/man/latest/bootctl.html).
+
+Subsequent package runs with this channel update the kernel from the repositories and return the default to the fallback for a fresh trial/promotion cycle. `stable` follows the same process with `linux-cachyos`; `unchanged` stops selecting a channel but does not uninstall the RC package or prevent normal pacman upgrades to it.
+
+#### Recovery and validation limits
+
+If a trial fails, reboot and select the stable/LTS entry. A one-time boot does not make the RC entry the persistent default, but it is not a watchdog and cannot recover a hung machine by itself. After promotion, use the boot menu to select the fallback if needed. Keep that entry and package installed. Configuration restore does **not** roll back kernel packages, repository upgrades, or bootctl default/one-time selections.
+
+Automated tests cover settings compatibility, version resolution, downgrade refusal, missing drivers, boot-space/mount checks, stale images, failed transactions, repeated upgrades, fallback retention, and promotion guards using an isolated filesystem and simulated commands. Installation and reboot still require validation in a CachyOS VM and on target hardware; this development build is not claimed to have passed those checks.
 
 <!-- pagebreak -->
 
@@ -446,7 +484,7 @@ Restore is not a system rollback: package upgrades stay installed; removed packa
 
 ### Current validation baseline
 
-This guide describes build `v0.2.0`. The non-root suite skips five privileged-operation tests; run `go test ./...` and `go vet ./...` for current results. Tests also cover latest-plugin refresh, obsolete-file restoration, Dux 2.0 paths/dock pins, future schema versions, and version changes between staging and login. CI also runs the five privileged-operation tests as root against temporary directories on an ephemeral runner. Real system operations and greeter setup still need target-machine testing. Tests cover CLI/settings validation, package selection and interactive review, readable check/apply output, JSON error reporting, unified reports and settings snapshots, separate staging, login ordering, payload/baseline conflicts, interrupted writes, DMS property merging, missing pending references, cleanup blocking, explicit and legacy restoration, source-preserving JSONC/MIME edits, personal appearance and symlink preservation, internal-only keyboard targeting, the three static laptop settings, staged fragment dependencies, plugin snapshots/preferences/loading, shell and container integrations, clipboard checks and screenshot handling. The [project README](../README.md) lists the Go test, vet and executable-build commands.
+This guide describes build `v0.3.0`. The non-root suite skips five privileged-operation tests; run `go test ./...` and `go vet ./...` for current results. Tests also cover latest-plugin refresh, obsolete-file restoration, Dux 2.0 paths/dock pins, future schema versions, and version changes between staging and login. CI also runs the five privileged-operation tests as root against temporary directories on an ephemeral runner. Real system operations and greeter setup still need target-machine testing. Tests cover CLI/settings validation, package selection and interactive review, readable check/apply output, JSON error reporting, unified reports and settings snapshots, separate staging, login ordering, payload/baseline conflicts, interrupted writes, DMS property merging, missing pending references, cleanup blocking, explicit and legacy restoration, source-preserving JSONC/MIME edits, personal appearance and symlink preservation, internal-only keyboard targeting, the three static laptop settings, staged fragment dependencies, plugin snapshots/preferences/loading, shell and container integrations, clipboard checks and screenshot handling. The [project README](../README.md) lists the Go test, vet and executable-build commands.
 
 A prior build was exercised on a target machine, applying staged configuration before Hyprland startup and loading all five DMS plugins. This build’s Dux 2.0 and latest-plugin changes have automated coverage and upstream-source checks, but still need a target-machine login test. Natural-scrolling verification and suspend/resume issues remain unresolved; this is not a complete hardware validation. Test the myarch-buildkit session, DMS, its five plugins, built-in display scaling, keyboard layout, natural scrolling and suspend/resume on the target machine before treating setup as complete. Native verification requires Hyprland config-validation support and an inspected DMS schema. Verified embedded-QML adapters cover DMS 1.6.2 (18/4) and Dux 2.0.0 (42/7); other versions require inspectable release or installed source.
 
@@ -612,4 +650,4 @@ Podman and kubectl appear in both their optional groups and core because the DMS
 
 AUR operations use a working `paru` or `yay`. If neither works, the installer attempts to install or repair repository `paru`, then `paru-bin` as the next candidate. `paru-bin` is a prebuilt alternative providing the same helper command. These helpers resolve and build selected AUR packages; they are conditional infrastructure outside the manifest above. The initial package upgrade also ensures `base-devel` and `git` are present.
 
-CachyOS and an already installed, running Hyprland are prerequisites. Hyprland receives normal repository updates during the full-system upgrade but is not a manifest-selected installation target. RC kernel selection remains a proposal; see [the planned RC kernel support](#planned-latest-cachyos-release-candidate-kernel).
+CachyOS and an already installed, running Hyprland are prerequisites. Hyprland receives normal repository updates during the full-system upgrade but is not a manifest-selected installation target. Optional kernel selection is separate from the application manifest; see [RC kernel support](#latest-cachyos-release-candidate-kernel).
