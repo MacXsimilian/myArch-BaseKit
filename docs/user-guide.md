@@ -1,7 +1,7 @@
 # myArch-BaseKit: User Guide
 
 Practical setup and daily-use reference\
-Documented build: **v0.1.0**\
+Documented build: **v0.2.0**\
 Documentation date: **6 October 2026**
 
 **Current required base: CachyOS on x86_64 with Hyprland already installed and running.** Regular Arch Linux, EndeavourOS and other distributions are not supported by this release. The installer currently checks for CachyOS explicitly.
@@ -57,7 +57,9 @@ chmod +x myarch-buildkit
 
 The output uses restrained color in a real terminal and plain text when redirected. Set `NO_COLOR=1` to disable color explicitly. The preview ends with an apply command that retains your settings and selected options.
 
-Package sources follow this order: keep a supported installed variant; otherwise try the listed repository package options from left to right, then the listed AUR fallbacks. Pacman uses the repositories enabled in `/etc/pacman.conf` in their configured priority order. The Repository packages column lists package names; exact repository names and availability are determined during apply.
+For an explanation of every package and its purpose, see the [package reference](#9-package-reference).
+
+Package sources follow this order: keep a supported installed variant when its update source is available; otherwise try the listed repository package options from left to right, then the listed AUR fallbacks. Pacman uses the repositories enabled in `/etc/pacman.conf` in their configured priority order. The Repository packages column lists package names; exact repository names and availability are determined during apply.
 
 The preview ends with the apply command and relevant follow-up commands. Bongo typing permission is an explicit optional step granting input-event access after logout. Choose myarch-buildkit at login, run the displayed check command, then run the displayed verify/cleanup command after checks pass. Those commands retain only settings and options relevant to each action.
 
@@ -232,6 +234,8 @@ The default scale is 4/3. A settings-file scale or `--laptop-scale` explicitly o
 | Work with Markdown notes | Obsidian; register/open the containing folder as a vault |
 | Browse a Synology SMB share | Files with SMB support; connect using the server address and your credentials |
 
+Fastfetch uses its built-in Arch logo through `~/.config/fastfetch/config.jsonc` (or the corresponding `XDG_CONFIG_HOME` path). The defaults stage preserves existing modules, display settings, and other logo options, and backs up the original configuration. Only the logo changes; OS information still identifies CachyOS. An explicit `--logo` argument in a custom shell startup command overrides the config setting.
+
 The installer keeps your existing login shell. It does not switch you to Zsh or Fish. It adds supported Starship, mise, zoxide, fzf and direnv integrations to Bash and applicable existing Zsh/Fish configurations. Existing prompt frameworks are preserved and may need manual adjustment if they conflict. Editor-related shell defaults use `code --wait`.
 
 Sign into Bitwarden, GitHub and other services yourself. Choose your Obsidian vault. Configure project runtimes and dependencies as needed. SMB support does not create NAS mounts, store credentials or install a Samba server. The manifest does not add VPN plugins or VPN profiles.
@@ -240,7 +244,11 @@ DMS clipboard history starts disabled. ClipBoard+ uses that same backend; `Super
 
 ### Included DMS plugins
 
-The desktop stage downloads pinned upstream copies of these five plugins into its separate staging directory. Their files and enablement settings are applied before DMS starts at the next myarch-buildkit login. Existing installations, including plugins installed under another directory name, are preserved. The desktop report records the installed or staged version and the commit used for each new snapshot.
+Each desktop run fetches the current default-branch HEAD of these five upstream repositories into its separate staging directory. These snapshots can include unreleased changes. A failed fetch stops staging instead of silently using an older checkout. The report records each manifest version, resolved commit, and destination.
+
+Existing user plugin copies, including installations under another directory name, are updated at the next myarch-buildkit login. Replaced files are backed up. A snapshot inventory tracks managed files and hashes; unchanged tracked files removed upstream are backed up and removed at the login boundary. Untracked files and locally modified obsolete files are preserved because they may contain user data. On the first upgrade of an older/unmanaged installation, extra files are preserved until there is a managed baseline. Plugin preferences in `plugin_settings.json` are preserved except for the documented enablement/backend choices. Keep personal source changes separately: plugin code is replaced by upstream code. A user copy overrides an existing system plugin without modifying package-owned files. Edits made after staging block activation until you cancel/restage.
+
+Bundles that remove obsolete files use pending-manifest version 3. Use this build's installed login helper to activate them; older helpers refuse these bundles. Explicit desktop restoration restores the backed-up files.
 
 | Plugin | Registry ID | Setup / use |
 | --- | --- | --- |
@@ -280,11 +288,37 @@ When upgrading from an older myarch-buildkit build, its two laptop helper units 
 
 The packages stage runs a full upgrade against the **enabled repositories**, then installs/updates the selected tools. It updates the manifest-selected AUR packages through a working `paru` or `yay`. It does not perform an update of every unrelated AUR package, Flatpak, pip/npm installation or project runtime. It does not schedule automatic updates.
 
-Installed supported alternatives such as `k6` or `k6-bin` are retained rather than replaced by an overlapping variant. The plan lists package options; the package profiles in `report.json` identify the exact choices. An unresolved update source is reported.
+Installed supported alternatives such as `k6` or `k6-bin` are retained when their repository/AUR update source can be verified. If that source is unavailable, setup searches the listed alternatives with an available source; package replacement remains subject to normal interactive package-manager prompts. If none is available, the package stage fails instead of reporting an old package as updated. The plan lists package options; the package profiles in `report.json` identify exact choices and installed versions.
+
+“Latest” means the versions offered by your enabled repositories/AUR for the selected package variants, and current upstream default branches for plugins. Setup does not enable testing repositories or replace every package with a development `-git` variant. Hyprland is already installed and receives normal repository upgrades during the full system upgrade.
+
+Dux Shell (DMS) 2.0 keeps the `dms` command and currently uses the `dms-shell` package. It moves config/state/cache from `DankMaterialShell/` to `dms/`, leaving compatibility symlinks. The installer writes directly to the new paths, uses settings schema 42/session schema 7, and configures the new per-dock settings and pins. If old user directories have not migrated yet, start the installed DMS once to let it migrate preferences, then rerun desktop setup. Existing JSON with an older schema must likewise be migrated by DMS first; setup does not relabel unmigrated data.
+
+For newer DMS releases, setup inspects installed schemas. When QML is embedded, it uses a verified release adapter or fetches the installed version's exact upstream tag and pinned shared-schema submodule during staging. Missing required fields or unavailable release sources stop configuration with an error. The installed DMS version/build output is recorded and must still match at login; upgrades after staging require restaging. Plan, check, and login do not fetch plugin or schema sources.
+
+Hyprland `.lua` and `.conf` configurations are selected by the active file's format and verified with the installed compositor's `--verify-config`. A newer version number alone does not block setup. This checks syntax/API compatibility, not all runtime desktop behavior.
 
 Cleanup removes Dolphin when Files is available; Alacritty when Ghostty and Hyprland checks pass, unless kept; and known duplicate GUI editors when VS Code is available. Dedicated notes apps are removed only when explicitly named. Normal package dependency checks can prevent removal.
 
 Selected camera diagnostics, Avahi browsers, hardware-topology and Qt/GTK settings launchers are hidden using reversible per-user overrides. Their packages remain installed. Cleanup does not remove every unfamiliar app, purge orphan packages, or uninstall Noctalia itself.
+
+### Planned: latest CachyOS release-candidate kernel
+
+**Status: proposal, not implemented in v0.2.0.** The current full-system upgrade updates installed kernel packages through the enabled repositories, but the installer does not select an RC kernel, manage kernel fallback entries, or change the default boot kernel. The settings and behavior below are proposed, not available commands or configuration fields.
+
+The proposed target is `linux-cachyos-rc`, which CachyOS describes as tracking the latest mainline kernel. “Latest” would mean the newest compatible package available from the enabled official CachyOS repositories at apply time; it would not guarantee the newest upstream release candidate is already packaged. See the [CachyOS kernel variants](https://wiki.cachyos.org/features/kernel/#variants).
+
+Implementation plan:
+
+1. **Explicit channel selection.** Add an opt-in kernel channel with `unchanged`, `stable`, and `rc` choices. Existing settings would retain current behavior. Selecting RC would persist the preference for later installer runs; it would not schedule updates.
+2. **Preflight checks.** Detect installed kernels, the bootloader, boot partition mounts and free space, Secure Boot, and required NVIDIA, ZFS, or DKMS modules. Resolve compatible modules before installation and block activation if compatibility cannot be established. CachyOS notes that external NVIDIA modules can lag kernel releases; see [NVIDIA module support](https://wiki.cachyos.org/features/kernel/#nvidia).
+3. **Runtime package resolution.** Select the latest available RC kernel, matching headers, and required modules without hardcoded versions. Report unavailable or incompatible packages explicitly. Handle release transitions without silently downgrading to an older RC or claiming an unavailable upstream build was installed.
+4. **Full-system upgrade integration.** Extend `packages.go` with kernel-specific logic in a new `kernel.go`. Install through the existing full-upgrade flow, retain a stable or LTS fallback and its boot entry, and update the RC package on subsequent runs.
+5. **Boot validation and activation.** Verify generated initramfs files, required modules, and boot entries. Offer a one-time RC boot where supported, followed by explicit promotion after a successful boot. Keep reboot manual and provide manual instructions for unsupported bootloader configurations.
+6. **Status and recovery.** Extend `plan` and `check` to distinguish the running kernel, installed RC version, fallback kernel, and reboot requirement. Keep `plan` read-only and network-free, identifying cached version information as provisional until apply refreshes repositories. Document recovery by booting the fallback; configuration restore would not undo kernel package transactions.
+7. **Validation before release.** Test channel/settings compatibility, version selection, unavailable modules, failed installation hooks, repeated runs, and fallback preservation. Run the Go test suite and vet, then verify installation and reboot in a CachyOS VM. Hardware-specific module and boot behavior would still require target-machine validation.
+
+RC kernels are development releases. The proposed policy is to track the latest official CachyOS RC package while retaining a bootable stable or LTS fallback.
 
 <!-- pagebreak -->
 
@@ -292,9 +326,9 @@ Selected camera diagnostics, Avahi browsers, hardware-topology and Qt/GTK settin
 
 ### Separate files and one startup method
 
-The bundle lives in the internal run directory under `~/.local/state/myarch-buildkit/runs/RUN_ID/STAGE/`, or the corresponding directory under `XDG_STATE_HOME`, away from active DMS files and their file watchers. Nothing stops DMS or reloads Hyprland during staging. The login launcher checks every pending payload and non-JSON baseline before writing any configuration. It also reruns native Hyprland validation and checks the supported DMS version. DMS settings, session, clipboard and plugin settings JSON merge the intended properties into the latest existing objects; unrelated runtime properties are retained.
+The bundle lives in the internal run directory under `~/.local/state/myarch-buildkit/runs/RUN_ID/STAGE/`, or the corresponding directory under `XDG_STATE_HOME`, away from active DMS files and their file watchers. Nothing stops DMS or reloads Hyprland during staging. The login launcher checks every pending payload and non-JSON baseline before writing any configuration. It also reruns native Hyprland validation and checks that DMS still matches the version/build validated during staging. DMS settings, session, clipboard and plugin settings JSON merge the intended properties into the latest existing objects; unrelated runtime properties are retained.
 
-Backups capture the files immediately before they are replaced at login. Each write is journalled first. An error or interruption leaves the bundle blocked for explicit cancellation/restoration; the launcher does not start the compositor after a failed apply, retry the operation automatically, or launch a rescue shell.
+Backups capture the files immediately before they are replaced or removed at login. Each write is journalled first. An error or interruption leaves the bundle blocked for explicit cancellation/restoration; the launcher does not start the compositor after a failed apply, retry the operation automatically, or launch a rescue shell.
 
 The managed startup is **Hyprland start hook → `dms run`**. At the login boundary, the launcher disables recorded alternate DMS and recognized competing service autostarts without stopping a running service. If a graphical desktop or relevant service is still running, it refuses to apply files. Recognized competing XDG autostarts are overridden in the pending bundle. Review personal `desktop-custom.lua` / `.conf` overrides for other shell launchers.
 
@@ -412,9 +446,9 @@ Restore is not a system rollback: package upgrades stay installed; removed packa
 
 ### Current validation baseline
 
-This guide describes build `v0.1.0`. The latest non-root validation reports **191 passing top-level tests and 5 skipped privileged-operation tests**; `go vet` passes. Statement coverage is 71.6%. Privileged system operations and greeter setup remain lightly covered in this run. Tests cover CLI/settings validation, package selection and interactive review, readable check/apply output, JSON error reporting, unified reports and settings snapshots, separate staging, login ordering, payload/baseline conflicts, interrupted writes, DMS property merging, missing pending references, cleanup blocking, explicit and legacy restoration, source-preserving JSONC/MIME edits, personal appearance and symlink preservation, internal-only keyboard targeting, the three static laptop settings, staged fragment dependencies, plugin snapshots/preferences/loading, shell and container integrations, clipboard checks and screenshot handling. The [project README](../README.md) lists the Go test, vet and executable-build commands.
+This guide describes build `v0.2.0`. The non-root suite skips five privileged-operation tests; run `go test ./...` and `go vet ./...` for current results. Tests also cover latest-plugin refresh, obsolete-file restoration, Dux 2.0 paths/dock pins, future schema versions, and version changes between staging and login. CI also runs the five privileged-operation tests as root against temporary directories on an ephemeral runner. Real system operations and greeter setup still need target-machine testing. Tests cover CLI/settings validation, package selection and interactive review, readable check/apply output, JSON error reporting, unified reports and settings snapshots, separate staging, login ordering, payload/baseline conflicts, interrupted writes, DMS property merging, missing pending references, cleanup blocking, explicit and legacy restoration, source-preserving JSONC/MIME edits, personal appearance and symlink preservation, internal-only keyboard targeting, the three static laptop settings, staged fragment dependencies, plugin snapshots/preferences/loading, shell and container integrations, clipboard checks and screenshot handling. The [project README](../README.md) lists the Go test, vet and executable-build commands.
 
-A target-machine run has applied the staged configuration before Hyprland startup and loaded all five DMS plugins. Natural-scrolling verification and suspend/resume issues remain unresolved; this is not a complete hardware validation. Test the myarch-buildkit session, DMS, its five plugins, built-in display scaling, keyboard layout, natural scrolling and suspend/resume on the target machine before treating setup as complete. Native verification requires supported installed Hyprland (hyprlang 0.54 or Lua 0.55/0.56) and the verified DMS schema (1.6.2, SettingsSpec 18 / SessionSpec 4).
+A prior build was exercised on a target machine, applying staged configuration before Hyprland startup and loading all five DMS plugins. This build’s Dux 2.0 and latest-plugin changes have automated coverage and upstream-source checks, but still need a target-machine login test. Natural-scrolling verification and suspend/resume issues remain unresolved; this is not a complete hardware validation. Test the myarch-buildkit session, DMS, its five plugins, built-in display scaling, keyboard layout, natural scrolling and suspend/resume on the target machine before treating setup as complete. Native verification requires Hyprland config-validation support and an inspected DMS schema. Verified embedded-QML adapters cover DMS 1.6.2 (18/4) and Dux 2.0.0 (42/7); other versions require inspectable release or installed source.
 
 ### Maintaining the native Go version
 
@@ -426,6 +460,8 @@ The single startup method follows [DMS's documented compositor-managed Hyprland 
 
 The requested plugin IDs and repositories follow the [DMS registry](https://github.com/AvengeMedia/dms-plugin-registry). Plugins use DMS default styling; this build adds no theme setup.
 
+Published Linux x86-64 downloads and checksum verification are described in the [README](../README.md#download-a-release). Maintainers should follow the [release procedure](../CONTRIBUTING.md#release-procedure).
+
 From the repository root, build from source with Go 1.23 or newer:
 
 ```bash
@@ -434,3 +470,146 @@ go vet ./...
 go build -o bin/myarch-buildkit ./cmd/myarch-buildkit
 ./bin/myarch-buildkit --version
 ```
+
+<!-- pagebreak -->
+
+## 9. Package reference
+
+This reference follows `PackageManifest()` in `cmd/myarch-buildkit/packages.go`. All four groups are enabled by default. Core must remain enabled; utilities, development, and containers can be disabled through the package-group settings described in section 4. These are direct package requirements, not a list of every transitive dependency that the package manager may install.
+
+Repository candidates are tried in the listed order unless an installed supported variant has a verified update source. AUR candidates are fallbacks, also in order; alternatives are not all installed together. Availability depends on the enabled repositories at apply time. An em dash means no candidate or command is declared in that column. Commands identify the tools checked by the installer, not every executable included in a package.
+
+Podman and kubectl appear in both their optional groups and core because the DMS plugins require them. Disabling containers or development therefore does not remove those core requirements. Installing tools does not configure accounts, clusters, cloud credentials, or project environments.
+
+### Core packages
+
+| Tool | Repository candidates | AUR fallback | Commands checked | Purpose |
+| --- | --- | --- | --- | --- |
+| DMS Docker Manager backend | `podman` | — | `podman` | Runs containers for the DMS Docker Manager plugin using Podman. |
+| DMS Kubernetes backend | `kubectl` | — | `kubectl` | Lets the DMS Kubernetes plugin query Kubernetes clusters. |
+| Bongo Cat keyboard events | `evtest` | — | `evtest` | Reads Linux input events for the Bongo Cat typing animation; access requires the optional input-permission setup. |
+| Bongo Cat input tools | `libinput-tools` | — | `libinput` | Provides input-device inspection tools used by the Bongo Cat integration. |
+| Fastfetch | `fastfetch` | — | `fastfetch` | Displays system information in the terminal; the defaults stage selects the Arch logo. |
+| Ghostty | `ghostty` | — | `ghostty` | Provides the default terminal emulator. |
+| GNOME Files | `nautilus` | — | `nautilus` | Provides the graphical file manager, also called Nautilus. |
+| GNOME Files SMB support | `gvfs-smb` | — | — | Lets Files browse and access SMB network shares; does not configure mounts or credentials. |
+| GNOME Files Open in Ghostty | `ghostty-nautilus` | — | — | Adds an Open in Ghostty action to Files. |
+| Microsoft VS Code | `visual-studio-code-bin` | `visual-studio-code-bin` | `code` | Provides Microsoft's Visual Studio Code editor distribution. |
+| Bitwarden Desktop | `bitwarden` | — | `bitwarden-desktop` | Provides the graphical Bitwarden password manager. |
+| Bitwarden CLI | `bitwarden-cli` | — | `bw` | Provides terminal access to Bitwarden through the bw command. |
+| Obsidian | `obsidian` | — | `obsidian` | Provides a Markdown-based notes and knowledge-management app. |
+| Firefox PDF viewer | `firefox` | — | `firefox` | Provides a web browser and the configured PDF viewer. |
+| VLC media player | `vlc` | — | `vlc` | Plays video and audio files. |
+| VLC format support | `vlc-plugins-all` | — | — | Adds VLC's full plugin set for broader media-format support. |
+| JetBrains Mono Nerd Font Mono | `ttf-jetbrains-mono-nerd` | — | — | Provides a monospaced programming font with Nerd Font symbols for terminals and prompts. |
+| Git | `git` | — | `git` | Provides version control and repository cloning, including installer source downloads. |
+| direnv | `direnv` | — | `direnv` | Loads and unloads directory-specific environment variables after authorization. |
+| fzf | `fzf` | — | `fzf` | Provides interactive fuzzy selection for shell workflows. |
+| zoxide | `zoxide` | — | `zoxide` | Tracks frequently used directories for quick navigation. |
+| Starship | `starship` | — | `starship` | Provides the configured cross-shell prompt. |
+| mise | `mise` | — | `mise` | Manages project tool versions and development environments; project runtimes are selected separately. |
+| XDG terminal selection | `xdg-terminal-exec` | — | `xdg-terminal-exec` | Launches the selected terminal for desktop applications that request one. |
+| XDG MIME tools | `xdg-utils` | — | `xdg-mime`, `xdg-open` | Provides xdg-open and xdg-mime for opening files and managing default applications. |
+| Desktop entry tools | `desktop-file-utils` | — | `update-desktop-database`, `desktop-file-validate` | Validates desktop entries and updates the desktop application database. |
+| Font configuration | `fontconfig` | — | `fc-cache`, `fc-match` | Manages font discovery, matching, and caches. |
+| AUR build dependencies | `base-devel` | — | — | Provides the Arch build-tool meta-package needed to build AUR packages. |
+| DankMaterialShell | `dms-shell` | — | `dms` | Provides Dux Shell, formerly Dank Material Shell, including the dms command and desktop shell UI. |
+| Quickshell | `quickshell` | — | `qs` | Provides the Qt/QML runtime used by the desktop shell. |
+| DankGreeter | `greetd-dms-greeter-bin` | `greetd-dms-greeter-bin` | `dms-greeter` | Provides the DMS-based graphical login greeter. |
+| greetd login manager | `greetd` | — | `greetd` | Provides the login service used to launch the configured greeter and session. |
+| Region screenshot capture | `grim` | — | `grim` | Captures Wayland screenshots; paired with slurp for region selection. |
+| Region screenshot selection | `slurp` | — | `slurp` | Selects a screen region for screenshot capture. |
+| Wayland clipboard tools | `wl-clipboard` | — | `wl-copy`, `wl-paste` | Provides wl-copy and wl-paste for the Wayland clipboard. |
+| Desktop notification tools | `libnotify` | — | `notify-send` | Provides notify-send for sending desktop notifications. |
+| Hyprland desktop portal | `xdg-desktop-portal-hyprland` | — | — | Provides Hyprland's desktop portal integration, including screen-sharing support. |
+| GTK file-picker portal | `xdg-desktop-portal-gtk` | — | — | Provides GTK-based file-picker portal dialogs for applications. |
+
+### Utilities packages
+
+| Tool | Repository candidates | AUR fallback | Commands checked | Purpose |
+| --- | --- | --- | --- | --- |
+| btop | `btop` | — | `btop` | Monitors CPU, memory, disks, network traffic, and processes in an interactive terminal view. |
+| dust | `dust` | — | `dust` | Displays directory disk usage as a readable tree to help locate large files and folders. |
+| PeaZip archive manager | `peazip`, `peazip-qt-bin` | `peazip-qt-bin`, `peazip` | `peazip` | Provides a graphical archive manager for creating and extracting archives. |
+| GNOME Camera (Snapshot) | `snapshot` | — | `snapshot` | Provides a graphical camera app for photos and video. |
+| Kooha screen recorder | `kooha` | — | `kooha` | Provides a graphical screen recorder. |
+| Kooha H.264 encoding | `gst-plugins-ugly` | — | — | Adds GStreamer plugins used for Kooha's H.264 encoding support. |
+| LocalSend | `localsend`, `localsend-bin` | `localsend-bin`, `localsend` | `localsend` | Transfers files between devices on the local network. |
+| LocalSend compatibility library | `libayatana-indicator` | — | — | Provides indicator-library compatibility required by the LocalSend integration. |
+
+### Development packages
+
+| Tool | Repository candidates | AUR fallback | Commands checked | Purpose |
+| --- | --- | --- | --- | --- |
+| GitHub CLI | `github-cli` | — | `gh` | Works with GitHub repositories, pull requests, issues, and authentication from the terminal. |
+| Git Delta | `git-delta` | — | `delta` | Displays Git diffs with syntax highlighting and improved formatting. |
+| Lazygit | `lazygit` | — | `lazygit` | Provides an interactive terminal interface for Git. |
+| pre-commit | `pre-commit` | — | `pre-commit` | Runs configured checks through Git hooks before commits. |
+| actionlint | `actionlint` | — | `actionlint` | Checks GitHub Actions workflow syntax, expressions, and common configuration errors. |
+| ShellCheck | `shellcheck` | — | `shellcheck` | Analyzes shell scripts for quoting, variable-expansion, and other common mistakes. |
+| Make | `make` | — | `make` | Runs build recipes defined in Makefiles. |
+| GNU Coreutils | `coreutils` | — | `ls`, `cp`, `mv`, `cat`, `sort` | Provides standard file and text utilities such as ls, cp, mv, cat, and sort. |
+| wget | `wget` | — | `wget` | Downloads files over HTTP, HTTPS, and FTP. |
+| jq | `jq` | — | `jq` | Queries and transforms JSON from the command line. |
+| yq (Mike Farah) | `go-yq` | — | `yq` | Queries and edits YAML using Mike Farah's Go implementation of yq. |
+| ripgrep | `ripgrep` | — | `rg` | Searches file contents quickly with the rg command. |
+| fd | `fd` | — | `fd` | Finds files and directories by name and other filters. |
+| bat | `bat` | — | `bat` | Displays file contents with syntax highlighting. |
+| eza | `eza` | — | `eza` | Lists directory contents with additional formatting and metadata. |
+| tmux | `tmux` | — | `tmux` | Keeps terminal sessions running and organizes them into windows and panes. |
+| tree | `tree` | — | `tree` | Displays directory contents as a tree. |
+| watch | `procps-ng` | — | `watch` | Provides watch for repeating a command and displaying its output; procps-ng also contains process utilities. |
+| kubectl | `kubectl` | — | `kubectl` | Manages Kubernetes resources and clusters; also required by the core DMS plugin. |
+| kubectx + kubens | `kubectx` | — | `kubectx`, `kubens` | Switches Kubernetes contexts and namespaces using kubectx and kubens. |
+| K9s | `k9s` | — | `k9s` | Provides an interactive terminal interface for Kubernetes. |
+| Helm | `helm` | — | `helm` | Installs and manages applications packaged as Kubernetes Helm charts. |
+| Helmfile | `helmfile` | — | `helmfile` | Declares and coordinates sets of Helm releases. |
+| Kustomize | `kustomize` | — | `kustomize` | Customizes Kubernetes YAML using reusable bases and overlays. |
+| kind | `kind` | — | `kind` | Runs local Kubernetes clusters in containers; installation alone does not create a cluster. |
+| Stern | `stern` | — | `stern` | Streams logs from multiple Kubernetes pods. |
+| Kubecolor | `kubecolor` | `kubecolor` | `kubecolor` | Adds color to kubectl output. |
+| Kubeconform | `kubeconform` | — | `kubeconform` | Validates Kubernetes manifests against schemas. |
+| Terraform | `terraform` | — | `terraform` | Defines and provisions infrastructure as code. |
+| Terragrunt | `terragrunt` | — | `terragrunt` | Coordinates Terraform configurations and reduces repeated infrastructure configuration. |
+| TFLint | `tflint` | — | `tflint` | Lints Terraform configuration for errors and best-practice issues. |
+| Terraform Docs | `terraform-docs` | `terraform-docs` | `terraform-docs` | Generates documentation from Terraform modules. |
+| Infracost | `infracost` | `infracost` | `infracost` | Estimates cloud costs from infrastructure definitions; service setup may be needed. |
+| Packer | `packer` | — | `packer` | Builds machine images from templates. |
+| Ansible | `ansible` | — | `ansible`, `ansible-playbook` | Automates machine configuration and deployment with inventories and playbooks. |
+| Trivy | `trivy` | — | `trivy` | Scans container images, filesystems, and infrastructure configuration for security issues. |
+| Gitleaks | `gitleaks` | — | `gitleaks` | Scans source code and Git history for exposed secrets. |
+| HTTPie | `httpie` | — | `http`, `https` | Provides readable command-line HTTP requests through http and https. |
+| grpcurl | `grpcurl`, `grpcurl-bin` | `grpcurl-bin`, `grpcurl` | `grpcurl` | Calls and inspects gRPC services from the terminal. |
+| websocat | `websocat` | — | `websocat` | Connects WebSockets to command-line streams for testing and debugging. |
+| MTR | `mtr` | — | `mtr` | Combines traceroute and ping-style measurements to diagnose network paths. |
+| Nmap | `nmap` | — | `nmap` | Discovers hosts and scans network ports and services. |
+| DNS diagnostics | `bind` | — | `dig` | Provides dig and other DNS utilities; installing it does not configure a DNS server. |
+| Network throughput testing | `iperf3` | — | `iperf3` | Measures network throughput between test endpoints. |
+| Packet capture | `tcpdump` | — | `tcpdump` | Captures and inspects network packets from the terminal. |
+| Ethernet diagnostics | `ethtool` | — | `ethtool` | Inspects and configures Ethernet device and link settings. |
+| Wireshark packet analyzer | `wireshark-qt` | — | `wireshark` | Provides a graphical packet analyzer; capture access depends on system permissions. |
+| k6 | `k6`, `k6-bin` | `k6-bin`, `k6` | `k6` | Runs scripted load and performance tests. |
+| uv | `uv` | — | `uv`, `uvx` | Manages Python environments, dependencies, and command-line tools through uv and uvx. |
+| Go (includes go install) | `go` | — | `go`, `gofmt` | Provides the Go compiler, standard tooling, gofmt, and go install. |
+| golangci-lint | `golangci-lint` | — | `golangci-lint` | Runs a collection of Go linters. |
+| gopls | `gopls` | — | `gopls` | Provides the Go language server for editor integration. |
+| Delve | `delve` | — | `dlv` | Debugs Go programs through the dlv command. |
+| GoReleaser | `goreleaser` | — | `goreleaser` | Builds and packages Go project releases. |
+| Neovim | `neovim` | — | `nvim` | Provides an extensible terminal text editor. |
+| Yazi | `yazi` | — | `yazi` | Provides a terminal file manager with previews and navigation. |
+| Midnight Commander | `mc` | — | `mc` | Provides a dual-pane terminal file manager. |
+
+### Containers packages
+
+| Tool | Repository candidates | AUR fallback | Commands checked | Purpose |
+| --- | --- | --- | --- | --- |
+| Podman | `podman` | — | `podman` | Runs and manages containers; also required by the core DMS Docker Manager plugin. |
+| Podman Compose | `podman-compose` | — | `podman-compose` | Runs Compose-defined multi-container applications with Podman. |
+| Podman rootless networking | `passt` | — | `pasta` | Provides pasta for rootless container networking. |
+| Podman subordinate-ID helpers | `shadow` | — | `newuidmap`, `newgidmap`, `getsubids` | Provides subordinate user/group ID helpers used by rootless containers. |
+
+### AUR helper and existing-system prerequisites
+
+AUR operations use a working `paru` or `yay`. If neither works, the installer attempts to install or repair repository `paru`, then `paru-bin` as the next candidate. `paru-bin` is a prebuilt alternative providing the same helper command. These helpers resolve and build selected AUR packages; they are conditional infrastructure outside the manifest above. The initial package upgrade also ensures `base-devel` and `git` are present.
+
+CachyOS and an already installed, running Hyprland are prerequisites. Hyprland receives normal repository updates during the full-system upgrade but is not a manifest-selected installation target. RC kernel selection remains a proposal; see [the planned RC kernel support](#planned-latest-cachyos-release-candidate-kernel).

@@ -15,10 +15,13 @@ import (
 )
 
 const shellBlockBegin = "# >>> cachyos-tooling-bootstrap >>>"
+
 const shellBlockEnd = "# <<< cachyos-tooling-bootstrap <<<"
+
 const composeProvider = "/usr/bin/podman-compose"
 
 var shellTools = []string{"mise", "zoxide", "fzf", "starship", "direnv"}
+
 var editorVars = []string{"EDITOR", "VISUAL", "GIT_EDITOR", "GH_EDITOR"}
 
 // Removing our complete blocks never evaluates, reformats or deletes user text.
@@ -48,6 +51,7 @@ func withoutShellBlock(text, label string) (string, error) {
 	}
 	return kept.String(), nil
 }
+
 func withShellBlock(base, body string) string {
 	separator := ""
 	if base != "" && !strings.HasSuffix(base, "\n\n") {
@@ -59,6 +63,7 @@ func withShellBlock(base, body string) string {
 	}
 	return base + separator + shellBlockBegin + "\n" + strings.TrimRight(body, "\n") + "\n" + shellBlockEnd + "\n"
 }
+
 func shellText(path string) (string, error) {
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
@@ -124,6 +129,7 @@ func inspectShellWords(line string) ([]string, error) {
 	flush()
 	return words, nil
 }
+
 func activeShellText(text string) string {
 	lines := []string{}
 	for _, line := range strings.Split(text, "\n") {
@@ -144,6 +150,7 @@ func activeShellText(text string) string {
 	}
 	return strings.Join(lines, "\n")
 }
+
 func literalShellSources(text, home, config, zdotdir string) []string {
 	paths := []string{}
 	pattern := regexp.MustCompile(`(?:^|[; ]|&&|\|\|)(?:source|\.)\s+([^;]+)`)
@@ -172,6 +179,7 @@ func literalShellSources(text, home, config, zdotdir string) []string {
 	}
 	return paths
 }
+
 func inspectShellSources(shell, rc, base, home, config, zdotdir string) (map[string][]string, []string) {
 	type source struct {
 		path, content string
@@ -269,6 +277,7 @@ func inspectShellSources(shell, rc, base, home, config, zdotdir string) (map[str
 	}
 	return recognized, conflicts
 }
+
 func posixShellBody(shell string, recognized map[string][]string) string {
 	var b strings.Builder
 	b.WriteString("# Editor and terminal defaults; open a new shell after setup.\n")
@@ -325,6 +334,7 @@ if [[ $- == *i* ]]; then
 	b.WriteString("    unset _cachyos_tooling_init _cachyos_tooling_go_bin\nfi\n")
 	return b.String()
 }
+
 func fishShellBody(recognized map[string][]string) string {
 	var b strings.Builder
 	b.WriteString("# Editor and terminal defaults; open a new shell after setup.\n")
@@ -386,6 +396,7 @@ if status is-interactive
 	b.WriteString("end\n")
 	return b.String()
 }
+
 func validateShell(c *Context, shell, text string, required bool) (string, error) {
 	if !hasCommand(shell) {
 		if required {
@@ -395,12 +406,18 @@ func validateShell(c *Context, shell, text string, required bool) (string, error
 	}
 	flags := map[string][]string{"bash": {"--noprofile", "--norc", "-n"}, "zsh": {"-f", "-n"}, "fish": {"--no-config", "-n"}, "sh": {"-n"}}
 	args := append([]string{shell}, flags[shell]...)
-	_, err := c.Command(Command{Args: args, Input: []byte(text), Env: map[string]string{"BASH_ENV": "", "ENV": ""}, Timeout: 20 * time.Second})
+	_, err := c.Command(Command{
+		Args:    args,
+		Input:   []byte(text),
+		Env:     map[string]string{"BASH_ENV": "", "ENV": ""},
+		Timeout: 20 * time.Second,
+	})
 	if err != nil {
 		return "", fmt.Errorf("%s syntax validation failed; configuration unchanged: %w", shell, err)
 	}
 	return "passed", nil
 }
+
 func ConfigureShell(c *Context) error {
 	zdotdir := os.Getenv("ZDOTDIR")
 	if zdotdir == "" {
@@ -410,7 +427,11 @@ func ConfigureShell(c *Context) error {
 		zdotdir = filepath.Join(c.Home, zdotdir[2:])
 	}
 	zdotdir, _ = filepath.Abs(zdotdir)
-	paths := map[string]string{"bash": filepath.Join(c.Home, ".bashrc"), "zsh": filepath.Join(zdotdir, ".zshrc"), "fish": filepath.Join(c.ConfigHome, "fish/config.fish")}
+	paths := map[string]string{
+		"bash": filepath.Join(c.Home, ".bashrc"),
+		"zsh":  filepath.Join(zdotdir, ".zshrc"),
+		"fish": filepath.Join(c.ConfigHome, "fish/config.fish"),
+	}
 	type writePlan struct{ path, text string }
 	plans := []writePlan{}
 	shellReport := map[string]any{}
@@ -503,10 +524,13 @@ type tomlStatement struct {
 	start, end int
 	text       string
 }
+
 type composeSelection struct {
-	tableEnd, start, end int
-	value                string
-	found, table         bool
+	tableEnd     int
+	start        int
+	end          int
+	value        string
+	found, table bool
 }
 
 func tomlStatements(text string) ([]tomlStatement, error) {
@@ -525,7 +549,7 @@ func tomlStatements(text string) ([]tomlStatement, error) {
 		part := text[start:end]
 		clean := strings.TrimSpace(tomlWithoutComments(part))
 		if clean != "" {
-			statements = append(statements, tomlStatement{start, end, clean})
+			statements = append(statements, tomlStatement{start: start, end: end, text: clean})
 		}
 		start = end
 	}
@@ -585,6 +609,7 @@ func tomlStatements(text string) ([]tomlStatement, error) {
 	}
 	return statements, nil
 }
+
 func tomlWithoutComments(text string) string {
 	var b strings.Builder
 	quote := byte(0)
@@ -623,6 +648,7 @@ func tomlWithoutComments(text string) string {
 	}
 	return b.String()
 }
+
 func tomlDelimiter(text string, delimiter byte) int {
 	quote := byte(0)
 	escaped := false
@@ -656,6 +682,7 @@ func tomlDelimiter(text string, delimiter byte) int {
 	}
 	return -1
 }
+
 func tomlParts(text string, delimiter byte) []string {
 	parts := []string{}
 	for {
@@ -667,6 +694,7 @@ func tomlParts(text string, delimiter byte) []string {
 		text = text[index+1:]
 	}
 }
+
 func tomlKey(text string) (string, error) {
 	parts := tomlParts(strings.TrimSpace(text), '.')
 	normalized := []string{}
@@ -690,6 +718,7 @@ func tomlKey(text string) (string, error) {
 	}
 	return strings.Join(normalized, "."), nil
 }
+
 func tomlString(text string) (string, error) {
 	for _, ch := range text {
 		if ch < 32 && ch != 9 || ch == 127 {
@@ -720,6 +749,7 @@ func tomlString(text string) (string, error) {
 	}
 	return value, nil
 }
+
 func validTOMLValue(value string, depth int) error {
 	if depth > 32 {
 		return fmt.Errorf("TOML nesting exceeds safe inspection limit")
@@ -800,6 +830,7 @@ func validTOMLValue(value string, depth int) error {
 	}
 	return fmt.Errorf("unsupported or invalid TOML value: %s", value)
 }
+
 func scanComposeConfig(text string) (composeSelection, error) {
 	result := composeSelection{start: -1, end: -1}
 	statements, err := tomlStatements(text)
@@ -889,11 +920,13 @@ func scanComposeConfig(text string) (composeSelection, error) {
 	}
 	return result, nil
 }
+
 func composeConfigured(selection composeSelection, allowSingle bool) bool {
 	if !selection.found {
 		return false
 	}
-	parts := tomlParts(strings.TrimSpace(selection.value)[1:len(strings.TrimSpace(selection.value))-1], ',')
+	array := strings.TrimSpace(selection.value)
+	parts := tomlParts(array[1:len(array)-1], ',')
 	if len(parts) > 0 && strings.TrimSpace(parts[len(parts)-1]) == "" {
 		parts = parts[:len(parts)-1]
 	}
@@ -910,6 +943,7 @@ func composeConfigured(selection composeSelection, allowSingle bool) bool {
 	appendSetting := regexp.MustCompile(`\s+`).ReplaceAllString(parts[1], "")
 	return appendSetting == "{append=false}" || appendSetting == `{"append"=false}` || appendSetting == "{'append'=false}"
 }
+
 func selectComposeProvider(text string) (string, error) {
 	selection, err := scanComposeConfig(text)
 	if err != nil {
@@ -995,6 +1029,7 @@ func parseSubordinateRanges(output string) ([]subordinateRange, bool, error) {
 	}
 	return ranges, ready, nil
 }
+
 func subordinateIDs(c *Context, username string, groups bool) map[string]any {
 	args := []string{"getsubids"}
 	if groups {
@@ -1015,10 +1050,12 @@ func subordinateIDs(c *Context, username string, groups bool) map[string]any {
 	}
 	return report
 }
+
 func executableFile(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && info.Mode().IsRegular() && syscall.Access(path, 1) == nil
 }
+
 func containerReadiness(c *Context) map[string]any {
 	username := os.Getenv("USER")
 	if current, err := user.Current(); err == nil {
@@ -1057,10 +1094,20 @@ func containerReadiness(c *Context) map[string]any {
 			c.Warn("Rootless containers pending: " + path + " disables user namespaces; no kernel settings were changed.")
 		}
 	}
-	return map[string]any{"user": username, "subuids": uids, "subgids": gids, "idmap_helpers": helpers, "cgroup_v2": cgroup, "user_namespace_settings": namespace, "ready": ready, "scope": "Static prerequisites only; no namespaces, Podman storage or containers initialized."}
+	return map[string]any{
+		"user":                    username,
+		"subuids":                 uids,
+		"subgids":                 gids,
+		"idmap_helpers":           helpers,
+		"cgroup_v2":               cgroup,
+		"user_namespace_settings": namespace,
+		"ready":                   ready,
+		"scope":                   "Static prerequisites only; no namespaces, Podman storage or containers initialized.",
+	}
 }
+
 func laterComposeOverrides(path string) ([]string, []string) {
-	conflicts, errors := []string{}, []string{}
+	conflicts, inspectionErrors := []string{}, []string{}
 	candidates, _ := filepath.Glob(filepath.Join(filepath.Dir(path), "*.conf"))
 	sort.Strings(candidates)
 	for _, candidate := range candidates {
@@ -1069,25 +1116,26 @@ func laterComposeOverrides(path string) ([]string, []string) {
 		}
 		info, err := os.Stat(candidate)
 		if err != nil || !info.Mode().IsRegular() || info.Size() > 2*1024*1024 {
-			errors = append(errors, candidate+": not a regular configuration file under 2 MiB")
+			inspectionErrors = append(inspectionErrors, candidate+": not a regular configuration file under 2 MiB")
 			continue
 		}
 		text, err := shellText(candidate)
 		if err != nil {
-			errors = append(errors, candidate+": "+err.Error())
+			inspectionErrors = append(inspectionErrors, candidate+": "+err.Error())
 			continue
 		}
 		selection, err := scanComposeConfig(text)
 		if err != nil {
-			errors = append(errors, candidate+": "+err.Error())
+			inspectionErrors = append(inspectionErrors, candidate+": "+err.Error())
 			continue
 		}
 		if selection.found && !composeConfigured(selection, true) {
 			conflicts = append(conflicts, candidate)
 		}
 	}
-	return conflicts, errors
+	return conflicts, inspectionErrors
 }
+
 func inspectContainers(c *Context, configure bool) error {
 	path := filepath.Join(c.ConfigHome, "containers/containers.conf.d/90-myarch-buildkit.conf")
 	readPath := path
@@ -1147,12 +1195,26 @@ func inspectContainers(c *Context, configure bool) error {
 		c.Warn("Effective Compose provider unverified: " + strings.Join(overrides, ", "))
 	}
 	ready := configured && providerExists && readiness["ready"] == true && len(overrides) == 0
-	c.Report["containers"] = map[string]any{"compose_provider": composeProvider, "compose_provider_configured": configured, "compose_provider_executable": providerExists, "readiness": readiness, "later_provider_overrides": conflicts, "dropin_inspection_errors": inspectionErrors, "configuration_overrides": overrides, "effective_provider_unverified": len(overrides) > 0, "ready": ready, "configuration_scope": "Static user drop-in inspection; system ordering, modules and runtime effective selection not evaluated."}
+	c.Report["containers"] = map[string]any{
+		"compose_provider":              composeProvider,
+		"compose_provider_configured":   configured,
+		"compose_provider_executable":   providerExists,
+		"readiness":                     readiness,
+		"later_provider_overrides":      conflicts,
+		"dropin_inspection_errors":      inspectionErrors,
+		"configuration_overrides":       overrides,
+		"effective_provider_unverified": len(overrides) > 0,
+		"ready":                         ready,
+		"configuration_scope":           "Static user drop-in inspection; system ordering, modules and runtime effective selection not evaluated.",
+	}
 	if configure && c.Options.EnablePodmanSocket {
 		if _, err := c.Run("systemctl", "--user", "enable", "--now", "podman.socket"); err != nil {
 			return err
 		}
-		c.Report["podman_socket"] = map[string]any{"explicitly_enabled": true, "restore_policy": "Explicit socket opt-in is not automatically reversed by file restoration."}
+		c.Report["podman_socket"] = map[string]any{
+			"explicitly_enabled": true,
+			"restore_policy":     "Explicit socket opt-in is not automatically reversed by file restoration.",
+		}
 	}
 	if configure {
 		if err := c.Save(); err != nil {
@@ -1164,5 +1226,7 @@ func inspectContainers(c *Context, configure bool) error {
 	}
 	return nil
 }
+
 func ConfigureContainers(c *Context) error { return inspectContainers(c, true) }
-func CheckContainers(c *Context) error     { return inspectContainers(c, false) }
+
+func CheckContainers(c *Context) error { return inspectContainers(c, false) }

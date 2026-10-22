@@ -40,28 +40,42 @@ That test uses an isolated command lookup path to verify that disabling optional
 
 Unit tests do not replace validation of the login session, DMS, input devices, display scaling, and suspend/resume on supported hardware. Follow the [user guide](docs/user-guide.md) for target-machine checks.
 
-GitHub Actions runs the build and validation as independent jobs on pushes, pull requests, and manual requests. The build uses stable Go and `CGO_ENABLED=0 GOOS=linux GOARCH=amd64 make checksum`, smoke-tests the CLI, and uploads a tar archive. The validation job runs `make vet` and `make test` without suppressing failures. An available artifact does not imply that the test job passed.
+GitHub Actions builds the Linux x86-64 archive with stable Go independently of validation. Tests and vet run on both Go 1.23 (the minimum in `go.mod`) and stable Go, with the race detector enabled. Stable Go also checks formatting and runs the five privileged-operation tests as root on an ephemeral runner, using temporary directories. Workflow and shell scripts are checked with actionlint and ShellCheck. An available development artifact does not imply that all checks passed.
+
+Use `make package` to produce the same archive locally. Release builds use `CGO_ENABLED=0 GOOS=linux GOARCH=amd64`. Generated files go in `bin/` and `dist/`; the archive and its external checksum are in `dist/`.
 
 ## Versioning
 
-Use tags in the form `vMAJOR.MINOR.PATCH` (without a dot after `v`). Keep `BuildID` in `cmd/myarch-buildkit/version.go` and the user guide's documented version aligned with the intended release. Data-format schema versions are independent of the application version.
+Use stable tags in the form `vMAJOR.MINOR.PATCH` (without leading zeroes). Tags must exactly match `BuildID` in `cmd/myarch-buildkit/version.go`; keep README and user guide versions aligned too. Schema versions are independent of application versions. Prerelease tags are not currently supported by the publishing workflow.
 
-Build a specific version locally with:
+## Release procedure
 
-```bash
-make checksum VERSION=v0.1.1
-./bin/myarch-buildkit --version
-```
+1. Prepare the intended version and documentation on a branch, review the changes, and merge to `master`. Wait for all checks on that commit to pass. Run target-machine validation described in the user guide; CI does not exercise a real desktop session.
+2. From a clean checkout of that exact commit, validate and build the release (replace `v0.2.0` with the intended version):
 
-After committing the release changes, create and push its tag:
+   ```bash
+   make check
+   make release-check VERSION=v0.2.0
+   CGO_ENABLED=0 GOOS=linux GOARCH=amd64 make package VERSION=v0.2.0
+   ./bin/myarch-buildkit --version
+   (cd dist && sha256sum -c SHA256SUMS)
+   ```
 
-```bash
-git tag v0.1.1
-git push origin v0.1.1
-```
+3. Create an annotated tag and push that tag only:
 
-The workflow validates the tag and embeds it through Go linker flags. It still uploads an Actions artifact; it does not publish a GitHub Release. Never reuse a published version for different source code.
+   ```bash
+   git tag -a v0.2.0 -m 'Release v0.2.0'
+   git push origin v0.2.0
+   ```
 
+4. Watch the tag's **Build and test** run. The build validates the version, embeds the tag, extracts and smoke-tests the packaged CLI, and uploads the archive and checksums. Publication waits for every build, test, and lint job to pass. The release job downloads that run's artifact, verifies its checksum, creates a draft with generated notes and both assets, then publishes it. Only this job receives `contents: write`; it uses the built-in `GITHUB_TOKEN`, with no personal token or repository secret required.
+5. Check the published release notes and download both assets from GitHub Releases. Verify and extract them using the README commands, then confirm `--version` matches the tag.
+
+A failed validation job prevents publication. Fix the source and use a new version/tag if the tagged source needs to change; never move a published tag. For a transient runner failure, rerun failed jobs. If publication created a draft before failing, inspect that draft and its assets: either finish publishing it manually or delete only the unpublished draft (keep the tag) before rerunning the release job. The workflow deliberately refuses to overwrite an existing release. A rerun after successful publication will fail at release creation without replacing assets.
+
+Manual workflow runs produce development artifacts, not releases, even when a tag is selected. Tags pushed by another workflow using `GITHUB_TOKEN` do not trigger this workflow; push release tags with your own authenticated Git client. No release is created until a matching version tag is pushed after this workflow is committed.
+
+Repository maintainers should require the build, both Go test jobs, and automation lint checks before merging into `master`. Branch/tag protection and repository Actions settings must be configured in GitHub; they are not applied by these files. Dependabot checks GitHub Actions versions weekly. Update the pinned actionlint version deliberately when a new release is available.
 
 ## Documentation and generated files
 

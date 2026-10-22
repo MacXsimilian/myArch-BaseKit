@@ -21,41 +21,76 @@ func TestParseOptionsValidCommands(t *testing.T) {
 		{"plan", []string{"plan"}, "plan", nil},
 		{"dry run", []string{"apply", "--dry-run"}, "plan", nil},
 		{"check flag", []string{"--check"}, "check", nil},
-		{"explicit settings", []string{"check", "--settings", "/tmp/settings.json"}, "check", func(t *testing.T, o Options) {
-			if o.SettingsPath != "/tmp/settings.json" {
-				t.Fatal("lost settings path")
-			}
-		}},
-		{"selected stages", []string{"apply", "--stage", "desktop", "--stage", "laptop"}, "apply", func(t *testing.T, o Options) {
-			if !reflect.DeepEqual(o.Stages, []string{"desktop", "laptop"}) {
-				t.Fatal("lost repeated stage choices")
-			}
-		}},
-		{"package group", []string{"apply", "--stage", "packages", "--package-group", "containers"}, "apply", func(t *testing.T, o Options) {
-			if o.PackageGroup != "containers" {
-				t.Fatal("lost selected group")
-			}
-		}},
-		{"configure only", []string{"--all", "--configure-only", "--keep-terminal"}, "apply", func(t *testing.T, o Options) {
-			if !o.All || !o.ConfigureOnly || !o.KeepTerminal {
-				t.Fatal("lost apply flags")
-			}
-		}},
-		{"ratio override", []string{"--laptop-scale", "4/3"}, "apply", func(t *testing.T, o Options) {
-			if o.LaptopScale != "4/3" {
-				t.Fatal("lost requested exact scale")
-			}
-		}},
-		{"notes opt in", []string{"--remove-notes", "gnote", "--remove-notes", "xpad"}, "apply", func(t *testing.T, o Options) {
-			if !reflect.DeepEqual(o.RemoveNotes, []string{"gnote", "xpad"}) {
-				t.Fatal("lost explicit notes removal")
-			}
-		}},
-		{"stage restore", []string{"--restore-stage", "desktop", "--stage-run-dir", "/tmp/run/stages/desktop"}, "apply", func(t *testing.T, o Options) {
-			if o.RestoreStage != "desktop" || o.StageRunDir != "/tmp/run/stages/desktop" {
-				t.Fatal("lost explicit restore target")
-			}
-		}},
+		{
+			"explicit settings",
+			[]string{"check", "--settings", "/tmp/settings.json"},
+			"check",
+			func(t *testing.T, o Options) {
+				if o.SettingsPath != "/tmp/settings.json" {
+					t.Fatal("lost settings path")
+				}
+			},
+		},
+		{
+			"selected stages",
+			[]string{"apply", "--stage", "desktop", "--stage", "laptop"},
+			"apply",
+			func(t *testing.T, o Options) {
+				if !reflect.DeepEqual(o.Stages, []string{"desktop", "laptop"}) {
+					t.Fatal("lost repeated stage choices")
+				}
+			},
+		},
+		{
+			"package group",
+			[]string{"apply", "--stage", "packages", "--package-group", "containers"},
+			"apply",
+			func(t *testing.T, o Options) {
+				if o.PackageGroup != "containers" {
+					t.Fatal("lost selected group")
+				}
+			},
+		},
+		{
+			"configure only",
+			[]string{"--all", "--configure-only", "--keep-terminal"},
+			"apply",
+			func(t *testing.T, o Options) {
+				if !o.All || !o.ConfigureOnly || !o.KeepTerminal {
+					t.Fatal("lost apply flags")
+				}
+			},
+		},
+		{
+			"ratio override",
+			[]string{"--laptop-scale", "4/3"},
+			"apply",
+			func(t *testing.T, o Options) {
+				if o.LaptopScale != "4/3" {
+					t.Fatal("lost requested exact scale")
+				}
+			},
+		},
+		{
+			"notes opt in",
+			[]string{"--remove-notes", "gnote", "--remove-notes", "xpad"},
+			"apply",
+			func(t *testing.T, o Options) {
+				if !reflect.DeepEqual(o.RemoveNotes, []string{"gnote", "xpad"}) {
+					t.Fatal("lost explicit notes removal")
+				}
+			},
+		},
+		{
+			"stage restore",
+			[]string{"--restore-stage", "desktop", "--stage-run-dir", "/tmp/run/stages/desktop"},
+			"apply",
+			func(t *testing.T, o Options) {
+				if o.RestoreStage != "desktop" || o.StageRunDir != "/tmp/run/stages/desktop" {
+					t.Fatal("lost explicit restore target")
+				}
+			},
+		},
 		{"profile restore", []string{"--restore-profile", "/tmp/run/stages/desktop"}, "apply", nil},
 	}
 	for _, item := range cases {
@@ -73,6 +108,7 @@ func TestParseOptionsValidCommands(t *testing.T) {
 		})
 	}
 }
+
 func TestParseOptionsRejectsAmbiguousOrUnsupportedExecution(t *testing.T) {
 	cases := []struct {
 		name string
@@ -97,7 +133,10 @@ func TestParseOptionsRejectsAmbiguousOrUnsupportedExecution(t *testing.T) {
 		{"restore packages unsupported", []string{"--restore-stage", "packages", "--stage-run-dir", "/tmp/run"}},
 		{"restore on explicit apply", []string{"apply", "--restore-profile", "/tmp/run"}},
 		{"restore with apply flags", []string{"--restore-profile", "/tmp/run", "--keep-terminal"}},
-		{"restore combined", []string{"--restore-profile", "/tmp/run", "--restore-stage", "desktop", "--stage-run-dir", "/tmp/run"}},
+		{
+			"restore combined",
+			[]string{"--restore-profile", "/tmp/run", "--restore-stage", "desktop", "--stage-run-dir", "/tmp/run"},
+		},
 		{"folder without restore", []string{"--stage-run-dir", "/tmp/run"}},
 	}
 	for _, item := range cases {
@@ -108,6 +147,7 @@ func TestParseOptionsRejectsAmbiguousOrUnsupportedExecution(t *testing.T) {
 		})
 	}
 }
+
 func TestSelectedStagesFollowDependenciesAndDisabledGroups(t *testing.T) {
 	withoutPackages := []string{"preflight", "defaults", "shell", "containers", "laptop", "desktop", "greeter", "verify"}
 	cases := []struct {
@@ -119,12 +159,34 @@ func TestSelectedStagesFollowDependenciesAndDisabledGroups(t *testing.T) {
 	}{
 		{name: "all", want: StageOrder},
 		{name: "shell retry", opts: Options{Stages: []string{"shell"}}, want: []string{"preflight", "shell"}},
-		{name: "canonical ordering", opts: Options{Stages: []string{"desktop", "laptop", "desktop"}}, want: []string{"preflight", "laptop", "desktop"}},
+		{
+			name: "canonical ordering",
+			opts: Options{Stages: []string{"desktop", "laptop", "desktop"}},
+			want: []string{"preflight", "laptop", "desktop"},
+		},
 		{name: "configure only", opts: Options{ConfigureOnly: true}, want: withoutPackages},
-		{name: "disabled container stage", opts: Options{Stages: []string{"containers"}}, disabled: []string{"containers"}, want: []string{"preflight"}},
-		{name: "package group needs packages", opts: Options{Stages: []string{"verify"}, PackageGroup: "development"}, fail: true},
-		{name: "disabled group rejected", opts: Options{Stages: []string{"packages"}, PackageGroup: "utilities"}, disabled: []string{"utilities"}, fail: true},
-		{name: "explicit group accepted", opts: Options{Stages: []string{"packages"}, PackageGroup: "development"}, want: []string{"preflight", "packages"}},
+		{
+			name:     "disabled container stage",
+			opts:     Options{Stages: []string{"containers"}},
+			disabled: []string{"containers"},
+			want:     []string{"preflight"},
+		},
+		{
+			name: "package group needs packages",
+			opts: Options{Stages: []string{"verify"}, PackageGroup: "development"},
+			fail: true,
+		},
+		{
+			name:     "disabled group rejected",
+			opts:     Options{Stages: []string{"packages"}, PackageGroup: "utilities"},
+			disabled: []string{"utilities"},
+			fail:     true,
+		},
+		{
+			name: "explicit group accepted",
+			opts: Options{Stages: []string{"packages"}, PackageGroup: "development"},
+			want: []string{"preflight", "packages"},
+		},
 	}
 	for _, item := range cases {
 		t.Run(item.name, func(t *testing.T) {
@@ -169,12 +231,14 @@ func mainStageContext(t *testing.T) *Context {
 	}
 	return c
 }
+
 func mainStageSeam(t *testing.T, fn func(*Context, string, string, bool, []string) error) {
 	t.Helper()
 	previous := executeStageFunc
 	executeStageFunc = fn
 	t.Cleanup(func() { executeStageFunc = previous })
 }
+
 func mainStageSummary(t *testing.T, c *Context) map[string]any {
 	t.Helper()
 	report := map[string]any{}
@@ -183,6 +247,7 @@ func mainStageSummary(t *testing.T, c *Context) map[string]any {
 	}
 	return report
 }
+
 func mainStageStatus(report map[string]any, name string) string {
 	return str(object(object(report["stages"])[name])["status"])
 }
@@ -232,6 +297,7 @@ func TestRunStagesPackageGroupingAndBootstrap(t *testing.T) {
 		})
 	}
 }
+
 func TestRunStagesCoreFailureDefersOptionalPackagesButKeepsIndependentStages(t *testing.T) {
 	c := mainStageContext(t)
 	executed := []string{}
@@ -254,6 +320,7 @@ func TestRunStagesCoreFailureDefersOptionalPackagesButKeepsIndependentStages(t *
 		t.Fatal("failed bootstrap did not defer optional packages/cleanup")
 	}
 }
+
 func TestRunStagesOptionalPackageFailureKeepsOtherOptionalGroups(t *testing.T) {
 	c := mainStageContext(t)
 	groups := []string{}
@@ -274,6 +341,7 @@ func TestRunStagesOptionalPackageFailureKeepsOtherOptionalGroups(t *testing.T) {
 		t.Fatalf("independent optional groups skipped after failure: %v", groups)
 	}
 }
+
 func TestRunStagesLaptopFailureBlocksDesktop(t *testing.T) {
 	c := mainStageContext(t)
 	executed := []string{}
@@ -295,6 +363,7 @@ func TestRunStagesLaptopFailureBlocksDesktop(t *testing.T) {
 		t.Fatal("desktop not marked skipped after laptop failure")
 	}
 }
+
 func TestRunStagesDesktopFailureBlocksDependentLaterStages(t *testing.T) {
 	c := mainStageContext(t)
 	executed := []string{}
@@ -319,6 +388,7 @@ func TestRunStagesDesktopFailureBlocksDependentLaterStages(t *testing.T) {
 		}
 	}
 }
+
 func TestRunStagesPendingLoginReturnsThreeAndBlocksCleanup(t *testing.T) {
 	c := mainStageContext(t)
 	executed := []string{}
@@ -344,6 +414,7 @@ func TestRunStagesPendingLoginReturnsThreeAndBlocksCleanup(t *testing.T) {
 		t.Fatal("staging incorrectly reported a live desktop change")
 	}
 }
+
 func TestRunStagesErrorTakesPriorityOverPendingExitCode(t *testing.T) {
 	c := mainStageContext(t)
 	mainStageSeam(t, func(child *Context, stage, _ string, _ bool, _ []string) error {
@@ -363,6 +434,7 @@ func TestRunStagesErrorTakesPriorityOverPendingExitCode(t *testing.T) {
 		t.Fatal("partial failure not reported")
 	}
 }
+
 func TestRunStagesInterruptStopsSubsequentConfiguration(t *testing.T) {
 	c := mainStageContext(t)
 	base, cancel := context.WithCancel(context.Background())
@@ -389,6 +461,7 @@ func TestRunStagesInterruptStopsSubsequentConfiguration(t *testing.T) {
 		t.Fatal("interruption not journalled")
 	}
 }
+
 func TestFailedPreflightPreservesInstalledBinary(t *testing.T) {
 	c := mainStageContext(t)
 	c.Binary = filepath.Join(c.Home, ".local/bin/myarch-buildkit")
@@ -442,6 +515,7 @@ func TestStageJournalFailureStopsLaterActions(t *testing.T) {
 		t.Fatalf("actions continued without a writable stage journal: %v", executed)
 	}
 }
+
 func TestReadOnlyCLIPathsCreateNoFilesOrCommands(t *testing.T) {
 	for _, args := range [][]string{{"plan"}, {"plan", "--details"}, {"--dry-run"}, {"--settings-template"}, {"--version"}, {"--help"}} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {

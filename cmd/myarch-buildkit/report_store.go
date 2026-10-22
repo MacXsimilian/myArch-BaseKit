@@ -8,6 +8,7 @@ import (
 )
 
 const RunReportFormat = "myarch-buildkit-run"
+
 const RunReportSchemaVersion = 3
 
 // Setup and login already hold the state lock. This also keeps independent

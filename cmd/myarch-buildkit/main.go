@@ -63,7 +63,7 @@ func ParseOptions(args []string) (Options, error) {
 	o := Options{Command: "apply"}
 	commandSet := false
 	value := func(index *int, flag string) (string, error) {
-		*index++
+		*index = *index + 1
 		if *index >= len(args) || strings.HasPrefix(args[*index], "--") {
 			return "", fmt.Errorf("%s needs a value", flag)
 		}
@@ -171,7 +171,7 @@ func ParseOptions(args []string) (Options, error) {
 	if o.RestoreProfile != "" && !filepath.IsAbs(o.RestoreProfile) {
 		return o, errors.New("--restore-profile needs an absolute directory")
 	}
-	if restoring && (o.Command != "apply" || commandSet || len(o.Stages) > 0 || o.All || o.ConfigureOnly || o.PackageGroup != "" || o.LaptopScale != "" || o.KeepTerminal || o.EnablePodmanSocket || len(o.RemoveNotes) > 0) {
+	if restoring && (o.Command != "apply" || commandSet || hasApplyOptions(o)) {
 		return o, errors.New("restore must be used on its own")
 	}
 	if o.RestoreStage != "" && o.RestoreProfile != "" {
@@ -181,20 +181,27 @@ func ParseOptions(args []string) (Options, error) {
 		if !contains([]string{"laptop", "desktop"}, o.CancelPending) {
 			return o, errors.New("--cancel-pending supports laptop or desktop")
 		}
-		if o.Command != "apply" || commandSet || restoring || o.StageRunDir != "" || len(o.Stages) > 0 || o.All || o.ConfigureOnly || o.PackageGroup != "" || o.LaptopScale != "" || o.KeepTerminal || o.EnablePodmanSocket || len(o.RemoveNotes) > 0 {
+		if o.Command != "apply" || commandSet || restoring || o.StageRunDir != "" || hasApplyOptions(o) {
 			return o, errors.New("--cancel-pending must be used on its own")
 		}
 	}
 	if o.StageRunDir != "" && o.RestoreStage == "" {
 		return o, errors.New("--stage-run-dir requires --restore-stage")
 	}
-	if o.Command == "check" && (len(o.Stages) > 0 || o.All || o.ConfigureOnly || o.PackageGroup != "" || o.LaptopScale != "" || o.KeepTerminal || o.EnablePodmanSocket || len(o.RemoveNotes) > 0) {
+	if o.Command == "check" && (hasApplyOptions(o)) {
 		return o, errors.New("check cannot be combined with execution or apply-only options")
 	}
 	if o.ConfigureOnly && o.PackageGroup != "" {
 		return o, errors.New("--package-group cannot be combined with --configure-only")
 	}
 	return o, nil
+}
+
+// hasApplyOptions identifies flags that must not accompany checks or recovery.
+func hasApplyOptions(o Options) bool {
+	return len(o.Stages) > 0 || o.All || o.ConfigureOnly ||
+		o.PackageGroup != "" || o.LaptopScale != "" || o.KeepTerminal ||
+		o.EnablePodmanSocket || len(o.RemoveNotes) > 0
 }
 
 func selectedStages(o Options, s Settings) ([]string, error) {
@@ -238,6 +245,7 @@ func requireCommands(names ...string) error {
 	}
 	return nil
 }
+
 func observeProfile(c *Context) error {
 	items, err := PendingItems(c)
 	if err != nil {
@@ -305,6 +313,7 @@ func observeRunningWhilePending(c *Context) {
 	}
 	c.Report["running_desktop"] = record
 }
+
 func checkHyprlandErrors(c *Context) error {
 	reply, err := c.Command(Command{Args: []string{"hyprctl", "-j", "configerrors"}, Timeout: 5 * time.Second})
 	if err != nil {
@@ -322,6 +331,7 @@ func checkHyprlandErrors(c *Context) error {
 	}
 	return nil
 }
+
 func checkAll(c *Context) error {
 	quiet := c.Quiet
 	c.Quiet = true
@@ -470,7 +480,10 @@ func acquireLock(c *Context) (func(), error) {
 		file.Close()
 		return nil, errors.New("another setup, login application or restore is running")
 	}
-	return func() { _ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN); _ = file.Close() }, nil
+	return func() {
+		_ = syscall.Flock(int(file.Fd()), syscall.LOCK_UN)
+		_ = file.Close()
+	}, nil
 }
 
 func ensureUserBinary(c *Context) error {
@@ -496,6 +509,24 @@ func ensureUserBinary(c *Context) error {
 	return writer.Write(c.Binary, data, 0755)
 }
 
+// stageRetryCommand preserves the original run's settings and explicit choices.
+func stageRetryCommand(binary, stage, group, settingsPath string, options Options) string {
+	retry := []string{binary, "apply", "--stage", stage, "--settings", settingsPath}
+	if group != "" {
+		retry = append(retry, "--package-group", group)
+	}
+	if options.KeepTerminal {
+		retry = append(retry, "--keep-terminal")
+	}
+	if options.EnablePodmanSocket {
+		retry = append(retry, "--enable-podman-socket")
+	}
+	for _, note := range options.RemoveNotes {
+		retry = append(retry, "--remove-notes", note)
+	}
+	return planShellWords(retry)
+}
+
 var executeStageFunc = stageRun
 
 func RunStages(root *Context, selected []string) (int, error) {
@@ -508,7 +539,24 @@ func RunStages(root *Context, selected []string) (int, error) {
 	executable, _ := currentExecutable()
 	hash, _ := FileHash(executable)
 	root.Report["provenance"] = map[string]any{"build": BuildID, "executable": executable, "sha256": hash}
-	summary := map[string]any{"format": RunReportFormat, "schema_version": RunReportSchemaVersion, "build": BuildID, "settings": root.Settings, "settings_file": effective, "provenance": root.Report["provenance"], "status": "running", "stages": map[string]any{}, "profiles": map[string]any{}, "rollback_limits": "Package upgrades are retained; configuration restore is per stage.", "manual_checks": []string{"Login and greeter", "Internal scale, Hungarian layout and natural scrolling", "Five DMS plugins; Bongo Cat input-group permission", "Camera, recording and audio"}}
+	summary := map[string]any{
+		"format":          RunReportFormat,
+		"schema_version":  RunReportSchemaVersion,
+		"build":           BuildID,
+		"settings":        root.Settings,
+		"settings_file":   effective,
+		"provenance":      root.Report["provenance"],
+		"status":          "running",
+		"stages":          map[string]any{},
+		"profiles":        map[string]any{},
+		"rollback_limits": "Package upgrades are retained; configuration restore is per stage.",
+		"manual_checks": []string{
+			"Login and greeter",
+			"Internal scale, Hungarian layout and natural scrolling",
+			"Five DMS plugins; Bongo Cat input-group permission",
+			"Camera, recording and audio",
+		},
+	}
 	summaryPath := root.ReportPath
 	records := object(summary["stages"])
 	if err := WriteJSON(summaryPath, summary); err != nil {
@@ -579,20 +627,7 @@ func RunStages(root *Context, selected []string) (int, error) {
 		if commandBinary == "" {
 			commandBinary = root.Binary
 		}
-		retry := []string{commandBinary, "apply", "--stage", stage, "--settings", effective}
-		if group != "" {
-			retry = append(retry, "--package-group", group)
-		}
-		if root.Options.KeepTerminal {
-			retry = append(retry, "--keep-terminal")
-		}
-		if root.Options.EnablePodmanSocket {
-			retry = append(retry, "--enable-podman-socket")
-		}
-		for _, note := range root.Options.RemoveNotes {
-			retry = append(retry, "--remove-notes", note)
-		}
-		record["retry"] = planShellWords(retry)
+		record["retry"] = stageRetryCommand(commandBinary, stage, group, effective, root.Options)
 		if stage != "packages" && stage != "preflight" && stage != "verify" {
 			record["restore"] = planShellWords([]string{commandBinary, "--restore-stage", stage, "--stage-run-dir", root.RunDir})
 		}
@@ -626,7 +661,10 @@ func RunStages(root *Context, selected []string) (int, error) {
 				continue
 			}
 			if len(items) > 0 {
-				records[stage] = map[string]any{"status": "blocked", "reason": "Configuration pending; check after the next myarch-buildkit login before cleanup"}
+				records[stage] = map[string]any{
+					"status": "blocked",
+					"reason": "Configuration pending; check after the next myarch-buildkit login before cleanup",
+				}
 				continue
 			}
 		}
@@ -697,7 +735,11 @@ func RunStages(root *Context, selected []string) (int, error) {
 			summary["status"] = "interrupted"
 		}
 	}
-	summary["pending_configuration"] = map[string]any{"status": map[bool]string{true: "pending", false: "none"}[len(items) > 0]}
+	pendingStatus := "none"
+	if len(items) > 0 {
+		pendingStatus = "pending"
+	}
+	summary["pending_configuration"] = map[string]any{"status": pendingStatus}
 	if err != nil {
 		summary["pending_configuration"] = pendingFailure(err)
 	}

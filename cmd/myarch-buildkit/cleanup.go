@@ -13,6 +13,7 @@ import (
 )
 
 var hiddenUtilityPackages = []string{"v4l-utils", "avahi", "hwloc", "qt6ct", "nwg-look", "lxappearance"}
+
 var duplicateEditorPackages = []string{"gnome-text-editor", "gedit", "mousepad", "xed", "kate", "kwrite", "leafpad", "pluma"}
 
 func ConfigureCleanup(c *Context) error {
@@ -48,12 +49,7 @@ func ConfigureCleanup(c *Context) error {
 	if hasCommand("nautilus") && resolver.isInstalled("nautilus") && resolver.isInstalled("dolphin") {
 		removals = append(removals, "dolphin")
 	}
-	codeInstalled := false
-	for _, name := range []string{"visual-studio-code-bin"} {
-		if resolver.isInstalled(name) {
-			codeInstalled = true
-		}
-	}
+	codeInstalled := resolver.isInstalled("visual-studio-code-bin")
 	if hasCommand("code") && codeInstalled {
 		for _, name := range duplicateEditorPackages {
 			if resolver.isInstalled(name) {

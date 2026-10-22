@@ -70,7 +70,11 @@ func TestDisabledContainersSkipOptionalChecksButKeepCorePodman(t *testing.T) {
 }
 
 func TestRunnerPreservesArgumentsInputAndEnvironment(t *testing.T) {
-	result, err := (ExecRunner{}).Execute(Command{Args: []string{"sh", "-c", `printf '%s:%s:' "$1" "$MYARCH_BUILDKIT_RUNNER_TEST"; cat`, "sh", "literal $(danger)"}, Env: map[string]string{"MYARCH_BUILDKIT_RUNNER_TEST": "custom value"}, Input: []byte("input")})
+	result, err := (ExecRunner{}).Execute(Command{
+		Args:  []string{"sh", "-c", `printf '%s:%s:' "$1" "$MYARCH_BUILDKIT_RUNNER_TEST"; cat`, "sh", "literal $(danger)"},
+		Env:   map[string]string{"MYARCH_BUILDKIT_RUNNER_TEST": "custom value"},
+		Input: []byte("input"),
+	})
 	if err != nil || result.Code != 0 || result.Stdout != "literal $(danger):custom value:input" {
 		t.Fatalf("%+v %v", result, err)
 	}

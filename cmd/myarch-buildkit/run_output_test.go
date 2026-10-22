@@ -12,12 +12,32 @@ func TestRunResultsShowFailureReasonAndRepairInsteadOfRetry(t *testing.T) {
 		"status": "partial",
 		"stages": map[string]any{
 			"preflight": map[string]any{"status": "completed"},
-			"verify":    map[string]any{"status": "failed", "error": "Pending laptop configuration is missing.", "recovery_command": command, "retry": "wrong-verify-only-retry"},
-			"cleanup":   map[string]any{"status": "blocked", "reason": "Verification must pass before cleanup."},
+			"verify": map[string]any{
+				"status":           "failed",
+				"error":            "Pending laptop configuration is missing.",
+				"recovery_command": command,
+				"retry":            "wrong-verify-only-retry",
+			},
+			"cleanup": map[string]any{"status": "blocked", "reason": "Verification must pass before cleanup."},
 		},
 		"pending_configuration": map[string]any{"status": "pending"},
 	})
-	for _, expected := range []string{"Setup results", "Setup needs attention", "Preflight", "Completed", "Verification", "Failed", "Cleanup", "Blocked", "Pending laptop configuration is missing.", "Verification must pass before cleanup.", "Repair", command, "/home/example user/run", "Resolve the failures"} {
+	for _, expected := range []string{
+		"Setup results",
+		"Setup needs attention",
+		"Preflight",
+		"Completed",
+		"Verification",
+		"Failed",
+		"Cleanup",
+		"Blocked",
+		"Pending laptop configuration is missing.",
+		"Verification must pass before cleanup.",
+		"Repair",
+		command,
+		"/home/example user/run",
+		"Resolve the failures",
+	} {
 		if !strings.Contains(text, expected) {
 			t.Errorf("missing %q in:\n%s", expected, text)
 		}
@@ -38,16 +58,38 @@ func TestRunResultsRetainRetryRestoreAndAllStatusesInStageOrder(t *testing.T) {
 		"status": "interrupted",
 		"error":  "Setup stopped before every stage completed.",
 		"stages": map[string]any{
-			"cleanup":              map[string]any{"status": "blocked", "reason": "Desktop staging did not complete."},
-			"verify":               map[string]any{"status": "skipped", "reason": "An earlier stage failed."},
-			"desktop":              map[string]any{"status": "interrupted", "error": "Interrupted by user.", "retry": "myarch-buildkit apply --stage desktop", "restore": "myarch-buildkit --restore-stage desktop --stage-run-dir /run/desktop"},
+			"cleanup": map[string]any{"status": "blocked", "reason": "Desktop staging did not complete."},
+			"verify":  map[string]any{"status": "skipped", "reason": "An earlier stage failed."},
+			"desktop": map[string]any{
+				"status":  "interrupted",
+				"error":   "Interrupted by user.",
+				"retry":   "myarch-buildkit apply --stage desktop",
+				"restore": "myarch-buildkit --restore-stage desktop --stage-run-dir /run/desktop",
+			},
 			"laptop":               map[string]any{"status": "pending_login", "restore": "myarch-buildkit --restore-stage laptop --stage-run-dir /run/laptop"},
 			"packages-development": map[string]any{"status": "completed"},
 			"packages-core":        map[string]any{"status": "completed"},
 		},
 	}
 	text := runResultsText(nil, summary)
-	for _, expected := range []string{"Setup interrupted", "Core packages", "Development packages", "Laptop settings", "Pending login", "Interrupted", "Skipped", "Blocked", "Interrupted by user.", "An earlier stage failed.", "Desktop staging did not complete.", "Retry", "myarch-buildkit apply --stage desktop", "Restore/cancel", "myarch-buildkit --restore-stage laptop --stage-run-dir /run/laptop", "Setup stopped before every stage completed."} {
+	for _, expected := range []string{
+		"Setup interrupted",
+		"Core packages",
+		"Development packages",
+		"Laptop settings",
+		"Pending login",
+		"Interrupted",
+		"Skipped",
+		"Blocked",
+		"Interrupted by user.",
+		"An earlier stage failed.",
+		"Desktop staging did not complete.",
+		"Retry",
+		"myarch-buildkit apply --stage desktop",
+		"Restore/cancel",
+		"myarch-buildkit --restore-stage laptop --stage-run-dir /run/laptop",
+		"Setup stopped before every stage completed.",
+	} {
 		if !strings.Contains(text, expected) {
 			t.Errorf("missing %q", expected)
 		}
@@ -78,7 +120,14 @@ func TestRunResultsPendingLoginInstructionsKeepSettingsCommandIntact(t *testing.
 	}
 	text := runResultsText(c, summary)
 	command := "'/home/example user/.local/bin/myarch-buildkit' check --settings '/home/example user/run/effective-settings.json'"
-	for _, expected := range []string{"Configuration awaits your next myarch-buildkit login", "Pending login", "Save your work, log out, and select myarch-buildkit", "After login", command, "Report"} {
+	for _, expected := range []string{
+		"Configuration awaits your next myarch-buildkit login",
+		"Pending login",
+		"Save your work, log out, and select myarch-buildkit",
+		"After login",
+		command,
+		"Report",
+	} {
 		if !strings.Contains(text, expected) {
 			t.Errorf("missing %q", expected)
 		}
@@ -90,7 +139,11 @@ func TestRunResultsPendingLoginInstructionsKeepSettingsCommandIntact(t *testing.
 
 func TestRunResultsUseConsolidatedReportForFollowupAndReportPath(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
-	c := &Context{Binary: "/home/example user/.local/bin/myarch-buildkit", RunDir: "/home/example user/run", ReportPath: "/home/example user/run/report.json"}
+	c := &Context{
+		Binary:     "/home/example user/.local/bin/myarch-buildkit",
+		RunDir:     "/home/example user/run",
+		ReportPath: "/home/example user/run/report.json",
+	}
 	text := runResultsText(c, map[string]any{
 		"status":        "pending_login",
 		"settings_file": c.ReportPath,
@@ -120,7 +173,14 @@ func TestRunResultsCompletedRunOmitsUnrelatedActions(t *testing.T) {
 			t.Errorf("missing %q", expected)
 		}
 	}
-	for _, unexpected := range []string{"Next steps", "Details and actions", "unused-retry", "unused-restore", "<nil>", "completed_with_manual_checks"} {
+	for _, unexpected := range []string{
+		"Next steps",
+		"Details and actions",
+		"unused-retry",
+		"unused-restore",
+		"<nil>",
+		"completed_with_manual_checks",
+	} {
 		if strings.Contains(text, unexpected) {
 			t.Errorf("unrelated action %q", unexpected)
 		}
@@ -155,12 +215,22 @@ func TestRunResultsRecoveryCommandsAreOrderedAndTargetOriginalProfile(t *testing
 			t.Errorf("command %q was wrapped or changed", command)
 		}
 	}
-	for _, unexpected := range []string{"superseded-singular-command", "misleading-desktop-retry", "wrong-new-empty-stage-restore", "wrong-verify-stage-restore", "log out, and select"} {
+	for _, unexpected := range []string{
+		"superseded-singular-command",
+		"misleading-desktop-retry",
+		"wrong-new-empty-stage-restore",
+		"wrong-verify-stage-restore",
+		"log out, and select",
+	} {
 		if strings.Contains(text, unexpected) {
 			t.Errorf("misleading action %q", unexpected)
 		}
 	}
-	for _, expected := range []string{"Pending configuration could not be inspected.", "Pending configuration is blocked.", "Complete the repair steps"} {
+	for _, expected := range []string{
+		"Pending configuration could not be inspected.",
+		"Pending configuration is blocked.",
+		"Complete the repair steps",
+	} {
 		if !strings.Contains(text, expected) {
 			t.Errorf("missing %q", expected)
 		}

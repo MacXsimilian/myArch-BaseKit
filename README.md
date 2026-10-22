@@ -1,6 +1,6 @@
 # myArch-BaseKit
 
-An opinionated workstation setup tool for development, DevOps, SRE, and platform engineering. The `myarch-buildkit` command configures packages, application defaults, shell integrations, containers, and a Hyprland desktop with Dank Material Shell.
+An opinionated workstation setup tool for development, DevOps, SRE, and platform engineering. The `myarch-buildkit` command configures packages, application defaults, shell integrations, containers, and a Hyprland desktop with Dux Shell (formerly Dank Material Shell).
 
 **Supported base:** native CachyOS on Linux x86-64, with Hyprland already installed and running. This tool configures an existing system; it does not install the operating system.
 
@@ -18,32 +18,46 @@ The preview does not change the system. Read the [user guide](docs/user-guide.md
 
 With GNU Make installed, `make build` builds the executable and `make checksum` also generates `bin/SHA256SUMS`. Verify it with `cd bin && sha256sum -c SHA256SUMS`.
 
-## Download an automatic build
+## Version policy
 
-The [Build and test workflow](https://github.com/MacXsimilian/myArch-BaseKit/actions/workflows/build.yml) builds a Linux x86-64 executable on every push and pull request. You can also start it from **Actions → Build and test → Run workflow** once the workflow is on the default branch.
+Package setup upgrades the enabled repositories and selected AUR packages to their available versions. Desktop setup refreshes all five plugins from their upstream default branches, records exact commits, and stages updates with backups for the next login. Plugin preferences are preserved.
 
-Open a workflow run and download **myarch-buildkit-linux-x86_64** from its **Artifacts** section. Unzip the download, then extract and verify the bundle:
+Dux Shell 2.0 is supported, including its `dms/` data directories and new dock settings. Newer shell releases are checked against their installed schemas or exact upstream release sources. Hyprland configuration must pass native validation; there is no fixed release-number ceiling. See the [update guide](docs/user-guide.md#updates-and-cleanup) for migration and recovery details.
+
+## Download a release
+
+Download `myarch-buildkit-linux-x86_64.tar.gz` and `SHA256SUMS` from [GitHub Releases](https://github.com/MacXsimilian/myArch-BaseKit/releases). In the download directory, verify the archive before extracting it into a separate directory:
 
 ```bash
-tar -xzf myarch-buildkit-linux-x86_64.tar.gz
+sha256sum -c SHA256SUMS
+mkdir -p myarch-buildkit-release
+tar -xzf myarch-buildkit-linux-x86_64.tar.gz -C myarch-buildkit-release
+cd myarch-buildkit-release
 sha256sum -c SHA256SUMS
 ./myarch-buildkit --version
 ./myarch-buildkit plan
 ```
 
-The archive preserves executable permissions and includes the checksum, license, and user guide. Artifacts are retained for 30 days. Builds use the current stable Go release with CGO disabled to avoid a host libc dependency.
+The outer checksum verifies the archive; the checksum inside verifies the executable. The archive includes the license, README, contributing guide, and user guide. Builds target Linux x86-64 with CGO disabled to avoid a host libc dependency.
 
-Tests and static analysis run in a separate job. A failed test marks the workflow unsuccessful, but the download remains available if the build job succeeds. Test failures are not suppressed. This workflow creates build artifacts, not GitHub Releases.
+Stable version tags publish a release only after the build, tests on minimum and stable Go, privileged-operation tests, and automation lint checks pass. See [the release procedure](CONTRIBUTING.md#release-procedure).
+
+## Download a development build
+
+The [Build and test workflow](https://github.com/MacXsimilian/myArch-BaseKit/actions/workflows/build.yml) also runs on branch pushes, pull requests, and manual requests. Open a run and download **myarch-buildkit-linux-x86_64** from **Artifacts**. Unzip it, then use the verification and extraction commands above. Artifacts expire after 30 days.
+
+Builds run independently of tests, so a development artifact can be available even when another check failed. Check the entire run before using it. Branch and manual runs do not publish releases.
 
 ## Versioning
 
-The program uses [semantic versioning](https://semver.org/), displayed as `vMAJOR.MINOR.PATCH`, starting at **v0.1.0**. Use `v0.1.1` for a compatible bug fix and `v0.2.0` for the next feature release. The `0.x` series is initial development; stable compatibility starts at `v1.0.0`.
+The program uses [semantic versioning](https://semver.org/), displayed as `vMAJOR.MINOR.PATCH`, currently **v0.2.0**. Use `v0.2.1` for a compatible bug fix and `v0.3.0` for the next feature release. The `0.x` series is initial development; stable compatibility starts at `v1.0.0`.
 
-The default version is defined in `cmd/myarch-buildkit/version.go`. A GitHub Actions build triggered by a tag such as `v0.1.1` embeds that tag in the executable and its run reports. Branch, pull-request, and ordinary local builds use the source version. Version numbers are chosen deliberately, not incremented on every build.
+The default version is defined in `cmd/myarch-buildkit/version.go`. A GitHub Actions build triggered by a tag such as `v0.2.0` embeds that tag in the executable and its run reports. Branch, pull-request, and ordinary local builds use the source version. Version numbers are chosen deliberately, not incremented on every build.
 
 ## Documentation
 
 - [User guide](docs/user-guide.md): setup, settings, commands, verification, and recovery.
+- [Package reference](docs/user-guide.md#9-package-reference): every package, its purpose, commands, optional group, and repository/AUR alternatives.
 - [Contributing](CONTRIBUTING.md): development workflow, code organization, and validation.
 - [License](LICENSE): MIT.
 
@@ -52,7 +66,7 @@ The default version is defined in `cmd/myarch-buildkit/version.go`. A GitHub Act
 ```text
 .
 ├── .github/
-│   └── workflows/build.yml # Automatic builds and validation
+│   └── workflows/build.yml # Builds, validation, and tagged releases
 ├── cmd/
 │   └── myarch-buildkit/   # Go command and adjacent unit tests
 ├── docs/
@@ -76,6 +90,6 @@ go test ./...
 go vet ./...
 ```
 
-Equivalent Make targets are `make test`, `make vet`, and `make check` (both checks).
+Equivalent Make targets are `make test`, `make vet`, and `make check` (formatting, tests, and vet).
 
-The latest non-root validation has 191 passing top-level tests and 5 skipped privileged-operation tests. Statement coverage is 71.6%; this does not establish target-machine readiness. See the user guide for hardware validation limits.
+The non-root suite skips five privileged-operation tests; CI runs those separately as root in temporary directories. Automated checks do not establish target-machine readiness; see the user guide for hardware validation limits.

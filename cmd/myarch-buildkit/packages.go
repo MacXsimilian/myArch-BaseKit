@@ -14,9 +14,11 @@ import (
 )
 
 type Tool struct {
-	Label                                   string
-	Commands, RepoCandidates, AURCandidates []string
-	Group                                   string
+	Label          string
+	Commands       []string
+	RepoCandidates []string
+	AURCandidates  []string
+	Group          string
 }
 
 // Explicit package identities only. No search result is installed automatically.
@@ -24,6 +26,9 @@ const packageRows = `DMS Docker Manager backend|podman|podman|-
 DMS Kubernetes backend|kubectl|kubectl|-
 Bongo Cat keyboard events|evtest|evtest|-
 Bongo Cat input tools|libinput|libinput-tools|-
+Fastfetch|fastfetch|fastfetch|-
+btop|btop|btop|-
+dust|dust|dust|-
 Ghostty|ghostty|ghostty|-
 GNOME Files|nautilus|nautilus|-
 GNOME Files SMB support|-|gvfs-smb|-
@@ -47,6 +52,8 @@ GitHub CLI|gh|github-cli|-
 Git Delta|delta|git-delta|-
 Lazygit|lazygit|lazygit|-
 pre-commit|pre-commit|pre-commit|-
+actionlint|actionlint|actionlint|-
+ShellCheck|shellcheck|shellcheck|-
 direnv|direnv|direnv|-
 Make|make|make|-
 GNU Coreutils|ls cp mv cat sort|coreutils|-
@@ -129,22 +136,74 @@ func PackageManifest() []Tool {
 		fields := strings.Split(row, "|")
 		group := "development"
 		switch fields[0] {
-		case "AUR build dependencies", "Bitwarden CLI", "Bitwarden Desktop", "Bongo Cat input tools", "Bongo Cat keyboard events", "DMS Docker Manager backend", "DMS Kubernetes backend", "DankGreeter", "DankMaterialShell", "Desktop entry tools", "Desktop notification tools", "Firefox PDF viewer", "Font configuration", "GNOME Files", "GNOME Files Open in Ghostty", "GNOME Files SMB support", "GTK file-picker portal", "Ghostty", "Git", "Hyprland desktop portal", "JetBrains Mono Nerd Font Mono", "Microsoft VS Code", "Obsidian", "Quickshell", "Region screenshot capture", "Region screenshot selection", "Starship", "VLC format support", "VLC media player", "Wayland clipboard tools", "XDG MIME tools", "XDG terminal selection", "direnv", "fzf", "greetd login manager", "mise", "zoxide":
+		case "Fastfetch",
+			"AUR build dependencies",
+			"Bitwarden CLI",
+			"Bitwarden Desktop",
+			"Bongo Cat input tools",
+			"Bongo Cat keyboard events",
+			"DMS Docker Manager backend",
+			"DMS Kubernetes backend",
+			"DankGreeter",
+			"DankMaterialShell",
+			"Desktop entry tools",
+			"Desktop notification tools",
+			"Firefox PDF viewer",
+			"Font configuration",
+			"GNOME Files",
+			"GNOME Files Open in Ghostty",
+			"GNOME Files SMB support",
+			"GTK file-picker portal",
+			"Ghostty",
+			"Git",
+			"Hyprland desktop portal",
+			"JetBrains Mono Nerd Font Mono",
+			"Microsoft VS Code",
+			"Obsidian",
+			"Quickshell",
+			"Region screenshot capture",
+			"Region screenshot selection",
+			"Starship",
+			"VLC format support",
+			"VLC media player",
+			"Wayland clipboard tools",
+			"XDG MIME tools",
+			"XDG terminal selection",
+			"direnv",
+			"fzf",
+			"greetd login manager",
+			"mise",
+			"zoxide":
 			group = "core"
-		case "GNOME Camera (Snapshot)", "Kooha H.264 encoding", "Kooha screen recorder", "LocalSend", "LocalSend compatibility library", "PeaZip archive manager":
+		case "btop",
+			"dust",
+			"GNOME Camera (Snapshot)",
+			"Kooha H.264 encoding",
+			"Kooha screen recorder",
+			"LocalSend",
+			"LocalSend compatibility library",
+			"PeaZip archive manager":
 			group = "utilities"
 		case "Podman", "Podman Compose", "Podman rootless networking", "Podman subordinate-ID helpers":
 			group = "containers"
 		}
-		split := func(s string) []string {
-			if s == "-" {
-				return nil
-			}
-			return strings.Fields(s)
-		}
-		result = append(result, Tool{Label: fields[0], Commands: split(fields[1]), RepoCandidates: split(fields[2]), AURCandidates: split(fields[3]), Group: group})
+		result = append(result, Tool{
+			Label:          fields[0],
+			Commands:       packageCandidates(fields[1]),
+			RepoCandidates: packageCandidates(fields[2]),
+			AURCandidates:  packageCandidates(fields[3]),
+			Group:          group,
+		})
 	}
 	return result
+}
+
+// A dash marks an empty manifest column; other columns are ordered candidates.
+func packageCandidates(column string) []string {
+	if column == "-" {
+		return nil
+	}
+	return strings.Fields(column)
 }
 
 func selectedTools(c *Context, group string) []Tool {
@@ -166,18 +225,23 @@ type packageSelection struct {
 	Source  string `json:"source"`
 	Package string `json:"package"`
 }
+
 type packageResolver struct {
-	context              *Context
-	installed, repo, aur map[string]bool
-	helper               string
+	context   *Context
+	installed map[string]bool
+	repo      map[string]bool
+	aur       map[string]bool
+	helper    string
 }
 
 func newPackageResolver(c *Context) *packageResolver {
 	return &packageResolver{context: c, installed: map[string]bool{}, repo: map[string]bool{}, aur: map[string]bool{}}
 }
+
 func (p *packageResolver) query(args ...string) (CommandResult, error) {
 	return p.context.Command(Command{Args: args, Env: map[string]string{"LC_ALL": "C"}})
 }
+
 func (p *packageResolver) isInstalled(name string) bool {
 	if found, ok := p.installed[name]; ok {
 		return found
@@ -186,6 +250,7 @@ func (p *packageResolver) isInstalled(name string) bool {
 	p.installed[name] = err == nil
 	return err == nil
 }
+
 func exactPackageInfo(info, name string) bool {
 	for _, line := range strings.Split(info, "\n") {
 		fields := strings.Fields(line)
@@ -195,6 +260,7 @@ func exactPackageInfo(info, name string) bool {
 	}
 	return false
 }
+
 func (p *packageResolver) repoHas(name string) bool {
 	if found, ok := p.repo[name]; ok {
 		return found
@@ -204,6 +270,7 @@ func (p *packageResolver) repoHas(name string) bool {
 	p.repo[name] = found
 	return found
 }
+
 func (p *packageResolver) aurHas(name string) bool {
 	if found, ok := p.aur[name]; ok {
 		return found
@@ -213,6 +280,7 @@ func (p *packageResolver) aurHas(name string) bool {
 	p.aur[name] = found
 	return found
 }
+
 func (p *packageResolver) findHelper() error {
 	for _, helper := range []string{"paru", "yay"} {
 		if _, err := p.query(helper, "--version"); err == nil {
@@ -237,6 +305,7 @@ func (p *packageResolver) findHelper() error {
 	}
 	return errors.New("no working paru/yay or repository paru; restore the CachyOS repository or repair an AUR helper")
 }
+
 func (p *packageResolver) resolve(tools []Tool) ([]packageSelection, error) {
 	result := []packageSelection{}
 	missing := []string{}
@@ -251,11 +320,12 @@ func (p *packageResolver) resolve(tools []Tool) ([]packageSelection, error) {
 			chosen.Source = "installed"
 			if p.repoHas(candidate) {
 				chosen.Source = "repo"
-			} else if containsPackage(tool.AURCandidates, candidate) {
+			} else if contains(tool.AURCandidates, candidate) {
 				if p.helper == "" {
 					if err := p.findHelper(); err != nil {
-						p.context.Warn("Retaining installed " + candidate + ": " + err.Error())
-						break
+						p.context.Warn("Cannot update installed " + candidate + ": " + err.Error())
+						chosen = packageSelection{Label: tool.Label}
+						continue
 					}
 				}
 				if p.aurHas(candidate) {
@@ -263,7 +333,9 @@ func (p *packageResolver) resolve(tools []Tool) ([]packageSelection, error) {
 				}
 			}
 			if chosen.Source == "installed" {
-				p.context.Warn("Retaining installed " + candidate + " for " + tool.Label + "; its exact update source was not verified. Updates remain pending.")
+				p.context.Warn("No verified update source for installed " + candidate + "; looking for an available package variant for " + tool.Label)
+				chosen = packageSelection{Label: tool.Label}
+				continue
 			}
 			break
 		}
@@ -301,20 +373,12 @@ func (p *packageResolver) resolve(tools []Tool) ([]packageSelection, error) {
 	}
 	return result, nil
 }
-func containsPackage(list []string, item string) bool {
-	for _, value := range list {
-		if value == item {
-			return true
-		}
-	}
-	return false
-}
 
 func InstallPackages(c *Context, group string, bootstrapped bool) error {
 	if c.CheckOnly || c.Options.Check || c.Options.DryRun {
 		return errors.New("package installation is unavailable in read-only check mode")
 	}
-	if group != "" && !containsPackage([]string{"core", "utilities", "development", "containers"}, group) {
+	if group != "" && !contains([]string{"core", "utilities", "development", "containers"}, group) {
 		return fmt.Errorf("unknown package group: %s", group)
 	}
 	tools := selectedTools(c, group)
@@ -441,11 +505,13 @@ func osReleaseID(data []byte) string {
 	}
 	return ""
 }
+
 func inputIsTerminal() bool {
 	var info syscall.Termios
 	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, os.Stdin.Fd(), syscall.TCGETS, uintptr(unsafe.Pointer(&info)))
 	return errno == 0
 }
+
 func CheckPlatform(c *Context, forApply bool) error {
 	if os.Geteuid() == 0 {
 		return errors.New("run as your regular desktop user without sudo in front of the installer")

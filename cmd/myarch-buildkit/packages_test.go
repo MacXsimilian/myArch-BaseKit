@@ -19,12 +19,27 @@ func (r *packageTestRunner) Execute(command Command) (CommandResult, error) {
 	}
 	return CommandResult{Code: 1}, nil
 }
+
 func packageTestContext(t *testing.T, r Runner) *Context {
 	t.Helper()
 	root := t.TempDir()
-	return &Context{Home: root, ConfigHome: filepath.Join(root, "config"), StateHome: filepath.Join(root, "state"), DataHome: filepath.Join(root, "data"), CacheHome: filepath.Join(root, "cache"), RunDir: filepath.Join(root, "run"), ReportPath: filepath.Join(root, "run", "report.json"), Report: map[string]any{}, Inventory: map[string]any{}, Runner: r, Settings: Settings{PackageGroups: map[string]bool{"core": true, "utilities": true, "development": true, "containers": true}}}
+	return &Context{
+		Home:       root,
+		ConfigHome: filepath.Join(root, "config"),
+		StateHome:  filepath.Join(root, "state"),
+		DataHome:   filepath.Join(root, "data"),
+		CacheHome:  filepath.Join(root, "cache"),
+		RunDir:     filepath.Join(root, "run"),
+		ReportPath: filepath.Join(root, "run", "report.json"),
+		Report:     map[string]any{},
+		Inventory:  map[string]any{},
+		Runner:     r,
+		Settings:   Settings{PackageGroups: map[string]bool{"core": true, "utilities": true, "development": true, "containers": true}},
+	}
 }
+
 func packageCmd(command Command) string { return strings.Join(command.Args, " ") }
+
 func packageReplyAllRepo(command Command) (CommandResult, error) {
 	args := command.Args
 	if len(args) > 1 && args[0] == "pacman" {
@@ -52,7 +67,22 @@ func TestPackageManifestPreservesApplicationsWithoutInstallerRuntime(t *testing.
 			t.Fatal("installer should not require Python")
 		}
 	}
-	for _, label := range []string{"DMS Docker Manager backend", "DMS Kubernetes backend", "Bongo Cat keyboard events", "Bongo Cat input tools", "DankMaterialShell", "DankGreeter", "Microsoft VS Code", "Go (includes go install)", "Podman Compose", "Terraform", "Ansible", "Bitwarden CLI", "Obsidian", "PeaZip archive manager"} {
+	for _, label := range []string{
+		"DMS Docker Manager backend",
+		"DMS Kubernetes backend",
+		"Bongo Cat keyboard events",
+		"Bongo Cat input tools",
+		"DankMaterialShell",
+		"DankGreeter",
+		"Microsoft VS Code",
+		"Go (includes go install)",
+		"Podman Compose",
+		"Terraform",
+		"Ansible",
+		"Bitwarden CLI",
+		"Obsidian",
+		"PeaZip archive manager",
+	} {
 		if seen[label].Label == "" {
 			t.Errorf("missing requested application %s", label)
 		}
@@ -64,6 +94,7 @@ func TestPackageManifestPreservesApplicationsWithoutInstallerRuntime(t *testing.
 		t.Fatal("plugin backend must remain core")
 	}
 }
+
 func TestExactPackageMetadataRejectsAliases(t *testing.T) {
 	if exactPackageInfo("Name : different-package\n", "wanted") {
 		t.Fatal("accepted a provider or alias as exact candidate")
@@ -72,6 +103,7 @@ func TestExactPackageMetadataRejectsAliases(t *testing.T) {
 		t.Fatal("rejected exact Name field")
 	}
 }
+
 func TestPackageResolutionPrefersRepository(t *testing.T) {
 	runner := &packageTestRunner{reply: packageReplyAllRepo}
 	c := packageTestContext(t, runner)
@@ -89,7 +121,8 @@ func TestPackageResolutionPrefersRepository(t *testing.T) {
 		}
 	}
 }
-func TestPackageResolutionRetainsInstalledAlternativeWhenUpdateSourceMissing(t *testing.T) {
+
+func TestPackageResolutionSelectsUpdatableAlternativeWhenInstalledSourceMissing(t *testing.T) {
 	runner := &packageTestRunner{reply: func(command Command) (CommandResult, error) {
 		switch packageCmd(command) {
 		case "pacman -Q -- alternative":
@@ -104,10 +137,11 @@ func TestPackageResolutionRetainsInstalledAlternativeWhenUpdateSourceMissing(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result[0].Package != "alternative" || result[0].Source != "installed" {
-		t.Fatalf("switched installed variant: %#v", result)
+	if result[0].Package != "preferred" || result[0].Source != "repo" {
+		t.Fatalf("kept an installed variant without an update source: %#v", result)
 	}
 }
+
 func TestAURHelperRepairUsesRepositoryAndNormalPrompts(t *testing.T) {
 	repaired := false
 	runner := &packageTestRunner{reply: func(command Command) (CommandResult, error) {
@@ -135,11 +169,12 @@ func TestAURHelperRepairUsesRepositoryAndNormalPrompts(t *testing.T) {
 		t.Fatal("repaired helper not selected")
 	}
 	for _, call := range runner.calls {
-		if containsPackage(call.Args, "--needed") || containsPackage(call.Args, "--noconfirm") || containsPackage(call.Args, "--overwrite") {
+		if contains(call.Args, "--needed") || contains(call.Args, "--noconfirm") || contains(call.Args, "--overwrite") {
 			t.Fatal("helper repair has unsafe/unhelpful flag")
 		}
 	}
 }
+
 func TestPackageQueriesCachedWithinStage(t *testing.T) {
 	runner := &packageTestRunner{reply: packageReplyAllRepo}
 	resolver := newPackageResolver(packageTestContext(t, runner))
@@ -156,6 +191,7 @@ func TestPackageQueriesCachedWithinStage(t *testing.T) {
 		}
 	}
 }
+
 func TestPackageInstallBootstrapOnceAndKeepReviewPrompts(t *testing.T) {
 	for _, bootstrapped := range []bool{false, true} {
 		runner := &packageTestRunner{reply: packageReplyAllRepo}
@@ -171,7 +207,7 @@ func TestPackageInstallBootstrapOnceAndKeepReviewPrompts(t *testing.T) {
 				if !command.Interactive {
 					t.Fatal("bootstrap prompts unavailable")
 				}
-				if containsPackage(command.Args, "python") {
+				if contains(command.Args, "python") {
 					t.Fatal("Go installer should not install Python runtime")
 				}
 			}
@@ -181,7 +217,7 @@ func TestPackageInstallBootstrapOnceAndKeepReviewPrompts(t *testing.T) {
 				}
 			}
 			for _, flag := range []string{"--noconfirm", "--overwrite", "-Rdd", "--nodeps"} {
-				if containsPackage(command.Args, flag) {
+				if contains(command.Args, flag) {
 					t.Fatalf("unsafe package flag: %s", flag)
 				}
 			}
@@ -195,6 +231,7 @@ func TestPackageInstallBootstrapOnceAndKeepReviewPrompts(t *testing.T) {
 		}
 	}
 }
+
 func TestPythonYQCollisionStopsBeforeToolTransaction(t *testing.T) {
 	runner := &packageTestRunner{reply: func(command Command) (CommandResult, error) {
 		if packageCmd(command) == "pacman -Q -- yq" {
@@ -214,6 +251,7 @@ func TestPythonYQCollisionStopsBeforeToolTransaction(t *testing.T) {
 		}
 	}
 }
+
 func TestReadOnlyPackageInstallationRefusesTransactions(t *testing.T) {
 	runner := &packageTestRunner{}
 	c := packageTestContext(t, runner)
@@ -225,6 +263,7 @@ func TestReadOnlyPackageInstallationRefusesTransactions(t *testing.T) {
 		t.Fatal("read-only mode issued package operation")
 	}
 }
+
 func TestUnknownNotesPackageRejectedBeforeCleanup(t *testing.T) {
 	runner := &packageTestRunner{}
 	c := packageTestContext(t, runner)
@@ -236,6 +275,7 @@ func TestUnknownNotesPackageRejectedBeforeCleanup(t *testing.T) {
 		t.Fatal("cleanup performed operations before validation")
 	}
 }
+
 func TestPendingDesktopBlocksAllCleanup(t *testing.T) {
 	runner := &packageTestRunner{}
 	c := packageTestContext(t, runner)
@@ -250,6 +290,7 @@ func TestPendingDesktopBlocksAllCleanup(t *testing.T) {
 		t.Fatal("pending configuration triggered cleanup operation")
 	}
 }
+
 func TestConfigureOnlySkipsCleanup(t *testing.T) {
 	runner := &packageTestRunner{}
 	c := packageTestContext(t, runner)
@@ -261,13 +302,20 @@ func TestConfigureOnlySkipsCleanup(t *testing.T) {
 		t.Fatal("configure-only cleanup called package manager")
 	}
 }
+
 func TestLauncherHidingPreservesCommandsAssociationsActions(t *testing.T) {
 	text := "# comment\n[Desktop Entry]\nName=Utility\nExec=utility %U\nMimeType=text/plain;\nNoDisplay=false\nActions=Open;\n\n[Desktop Action Open]\nExec=utility --open\n"
 	hidden, err := hiddenEntry(text)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, line := range []string{"# comment\n", "Exec=utility %U\n", "MimeType=text/plain;\n", "Actions=Open;\n", "[Desktop Action Open]\nExec=utility --open\n"} {
+	for _, line := range []string{
+		"# comment\n",
+		"Exec=utility %U\n",
+		"MimeType=text/plain;\n",
+		"Actions=Open;\n",
+		"[Desktop Action Open]\nExec=utility --open\n",
+	} {
 		if !strings.Contains(hidden, line) {
 			t.Fatalf("lost launcher data %q", line)
 		}
@@ -280,6 +328,7 @@ func TestLauncherHidingPreservesCommandsAssociationsActions(t *testing.T) {
 		t.Fatal("launcher hiding not idempotent")
 	}
 }
+
 func TestLauncherHidingPreservesExistingUserOverrideAndBacksUp(t *testing.T) {
 	c := packageTestContext(t, &packageTestRunner{})
 	source := filepath.Join(c.Home, "approved.desktop")
@@ -313,6 +362,7 @@ func TestLauncherHidingPreservesExistingUserOverrideAndBacksUp(t *testing.T) {
 		t.Fatal("backup does not preserve original override")
 	}
 }
+
 func TestLauncherSymlinkPreserved(t *testing.T) {
 	c := packageTestContext(t, &packageTestRunner{})
 	source := filepath.Join(c.Home, "approved.desktop")
@@ -333,6 +383,7 @@ func TestLauncherSymlinkPreserved(t *testing.T) {
 		t.Fatal("symlink was not preserved")
 	}
 }
+
 func TestOSReleaseIDParsing(t *testing.T) {
 	for _, text := range []string{"NAME=CachyOS\nID=cachyos\n", "ID=\"cachyos\"\n", "ID='cachyos'\n"} {
 		if osReleaseID([]byte(text)) != "cachyos" {
@@ -358,6 +409,7 @@ func TestHyprlandParseErrorsPreventCleanup(t *testing.T) {
 		}
 	}
 }
+
 func TestDependencyRefusalRetainsDuplicateWithoutCascade(t *testing.T) {
 	t.Setenv("WAYLAND_DISPLAY", "wayland-test")
 	t.Setenv("HYPRLAND_INSTANCE_SIGNATURE", "test-session")
@@ -379,7 +431,15 @@ func TestDependencyRefusalRetainsDuplicateWithoutCascade(t *testing.T) {
 	if err := os.WriteFile(policy, []byte(`{"internal_outputs":[],"internal_keyboards":[],"internal_scale":1.3333333333333333,"natural_scroll":true}`), 0600); err != nil {
 		t.Fatal(err)
 	}
-	installed := map[string]bool{"nautilus": true, "dolphin": true, "visual-studio-code-bin": true, "kate": true, "ghostty": true, "alacritty": true, "gnote": true}
+	installed := map[string]bool{
+		"nautilus":               true,
+		"dolphin":                true,
+		"visual-studio-code-bin": true,
+		"kate":                   true,
+		"ghostty":                true,
+		"alacritty":              true,
+		"gnote":                  true,
+	}
 	c.Options.KeepTerminal = true
 	runner := &packageTestRunner{reply: func(command Command) (CommandResult, error) {
 		args := command.Args
@@ -409,7 +469,15 @@ func TestDependencyRefusalRetainsDuplicateWithoutCascade(t *testing.T) {
 			return CommandResult{Code: 1, Stderr: "required by another package"}, nil
 		}
 		if len(args) > 1 && args[0] == "xdg-mime" {
-			values := map[string]string{"text/plain": "code.desktop", "x-scheme-handler/obsidian": "obsidian.desktop", "text/markdown": MarkdownDesktop, "inode/directory": "org.gnome.Nautilus.desktop", "application/pdf": "firefox.desktop", "audio/mpeg": "vlc.desktop", "video/mp4": "vlc.desktop"}
+			values := map[string]string{
+				"text/plain":                "code.desktop",
+				"x-scheme-handler/obsidian": "obsidian.desktop",
+				"text/markdown":             MarkdownDesktop,
+				"inode/directory":           "org.gnome.Nautilus.desktop",
+				"application/pdf":           "firefox.desktop",
+				"audio/mpeg":                "vlc.desktop",
+				"video/mp4":                 "vlc.desktop",
+			}
 			return CommandResult{Stdout: values[args[len(args)-1]]}, nil
 		}
 		if args[0] == "fc-match" {
@@ -439,10 +507,10 @@ func TestDependencyRefusalRetainsDuplicateWithoutCascade(t *testing.T) {
 			if !command.Interactive {
 				t.Fatal("removal prompts missing")
 			}
-			if containsPackage(command.Args, "alacritty") {
+			if contains(command.Args, "alacritty") {
 				t.Fatal("--keep-terminal ignored")
 			}
-			if containsPackage(command.Args, "gnote") {
+			if contains(command.Args, "gnote") {
 				t.Fatal("notes removed without explicit selection")
 			}
 			if packageCmd(command) == "sudo pacman -R -- dolphin" {
@@ -451,7 +519,7 @@ func TestDependencyRefusalRetainsDuplicateWithoutCascade(t *testing.T) {
 			if packageCmd(command) == "sudo pacman -R -- kate" {
 				sawKate = true
 			}
-			if containsPackage(command.Args, "--nodeps") || containsPackage(command.Args, "-Rdd") || containsPackage(command.Args, "-Rns") {
+			if contains(command.Args, "--nodeps") || contains(command.Args, "-Rdd") || contains(command.Args, "-Rns") {
 				t.Fatal("bypassed package dependency gate")
 			}
 		}
@@ -474,5 +542,38 @@ func TestDependencyRefusalRetainsDuplicateWithoutCascade(t *testing.T) {
 	}
 	if len(reportRecords(report, "file_changes")) != 0 {
 		t.Fatal("cleanup report artifacts were recorded as configuration changes")
+	}
+}
+
+func TestPackageResolutionFailsWhenNoVariantCanBeUpdated(t *testing.T) {
+	runner := &packageTestRunner{reply: func(command Command) (CommandResult, error) {
+		if packageCmd(command) == "pacman -Q -- old-app" {
+			return CommandResult{}, nil
+		}
+		return CommandResult{Code: 1}, nil
+	}}
+	c := packageTestContext(t, runner)
+	_, err := newPackageResolver(c).resolve([]Tool{{Label: "App", RepoCandidates: []string{"old-app"}}})
+	if err == nil {
+		t.Fatal("unupdateable installed package reported as resolved")
+	}
+}
+
+func TestPackageResolutionKeepsInstalledVariantWithUpdateSource(t *testing.T) {
+	runner := &packageTestRunner{reply: func(command Command) (CommandResult, error) {
+		switch packageCmd(command) {
+		case "pacman -Q -- alternative":
+			return CommandResult{}, nil
+		case "pacman -Si --color never -- alternative":
+			return CommandResult{Stdout: "Name : alternative\n"}, nil
+		case "pacman -Si --color never -- preferred":
+			return CommandResult{Stdout: "Name : preferred\n"}, nil
+		}
+		return CommandResult{Code: 1}, nil
+	}}
+	c := packageTestContext(t, runner)
+	result, err := newPackageResolver(c).resolve([]Tool{{Label: "App", RepoCandidates: []string{"preferred", "alternative"}}})
+	if err != nil || len(result) != 1 || result[0].Package != "alternative" || result[0].Source != "repo" {
+		t.Fatalf("%v %v", result, err)
 	}
 }

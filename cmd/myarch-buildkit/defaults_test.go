@@ -26,10 +26,23 @@ func defaultsContext(t *testing.T) (*Context, *defaultsRunner) {
 	t.Helper()
 	home := t.TempDir()
 	runner := &defaultsRunner{}
-	c := &Context{Home: home, ConfigHome: filepath.Join(home, "config"), DataHome: filepath.Join(home, "data"), StateHome: filepath.Join(home, "state"), CacheHome: filepath.Join(home, "cache"), BinDir: filepath.Join(home, "bin"), RunDir: filepath.Join(home, "run"), Report: map[string]any{}, Inventory: map[string]any{}, Runner: runner, Binary: filepath.Join(home, "bin", "myarch-buildkit")}
+	c := &Context{
+		Home:       home,
+		ConfigHome: filepath.Join(home, "config"),
+		DataHome:   filepath.Join(home, "data"),
+		StateHome:  filepath.Join(home, "state"),
+		CacheHome:  filepath.Join(home, "cache"),
+		BinDir:     filepath.Join(home, "bin"),
+		RunDir:     filepath.Join(home, "run"),
+		Report:     map[string]any{},
+		Inventory:  map[string]any{},
+		Runner:     runner,
+		Binary:     filepath.Join(home, "bin", "myarch-buildkit"),
+	}
 	c.ReportPath = filepath.Join(c.RunDir, "report.json")
 	return c, runner
 }
+
 func defaultsPut(t *testing.T, path, text string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
@@ -39,6 +52,7 @@ func defaultsPut(t *testing.T, path, text string) {
 		t.Fatal(err)
 	}
 }
+
 func defaultsRead(t *testing.T, path string) string {
 	t.Helper()
 	data, err := os.ReadFile(path)
@@ -85,7 +99,13 @@ func TestDefaultsJSONCPreservesCommentsAndNestedSettings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, kept := range []string{"// Keep this explanatory comment", "/* retain */", "\"日本語\": {\"editor.fontFamily\": \"nested\",}", "https://host/a//b/*c*/", "\xef\xbb\xbf"} {
+	for _, kept := range []string{
+		"// Keep this explanatory comment",
+		"/* retain */",
+		"\"日本語\": {\"editor.fontFamily\": \"nested\",}",
+		"https://host/a//b/*c*/",
+		"\xef\xbb\xbf",
+	} {
 		if !strings.Contains(after, kept) {
 			t.Fatalf("lost unrelated source %q: %s", kept, after)
 		}
@@ -134,7 +154,13 @@ func TestDefaultsMIMEPreservesFallbacksAndUnrelatedSections(t *testing.T) {
 	before := "# My defaults\r\n[Default Applications]\r\n text/plain = old.desktop;code.desktop;fallback.desktop;\r\nimage/png=viewer.desktop;\r\n[Added Associations]\r\ntext/plain=old.desktop;code.desktop;\r\n[Removed Associations]\r\ntext/plain=code.desktop;blocked.desktop;\r\n[Other]\r\nkeep=yes\r\n"
 	selected := map[string]string{"text/plain": "code.desktop", "text/x-go": "code.desktop"}
 	updated := EditMIMEDefaults(EditMIMEAssociations(before, selected), selected)
-	for _, part := range []string{"# My defaults\r\n", " text/plain = code.desktop;old.desktop;fallback.desktop;\r\n", "image/png=viewer.desktop;\r\n", "text/plain=blocked.desktop;\r\n", "[Other]\r\nkeep=yes\r\n"} {
+	for _, part := range []string{
+		"# My defaults\r\n",
+		" text/plain = code.desktop;old.desktop;fallback.desktop;\r\n",
+		"image/png=viewer.desktop;\r\n",
+		"text/plain=blocked.desktop;\r\n",
+		"[Other]\r\nkeep=yes\r\n",
+	} {
 		if !strings.Contains(updated, part) {
 			t.Fatalf("missing %q in %s", part, updated)
 		}
@@ -156,13 +182,24 @@ func TestDefaultsMIMEAddsOnlySelectedAssociation(t *testing.T) {
 }
 
 func TestDefaultsLauncherRecognizesOnlySharedOptions(t *testing.T) {
-	for _, item := range []struct{ before, after string }{{"kitty", "ghostty"}, {" uwsm app -- /usr/bin/kitty -e bash -lc 'echo hi'", " uwsm app -- /usr/bin/ghostty -e bash -lc 'echo hi'"}, {"gedit --wait", "code --wait"}} {
+	for _, item := range []struct{ before, after string }{
+		{"kitty", "ghostty"},
+		{" uwsm app -- /usr/bin/kitty -e bash -lc 'echo hi'", " uwsm app -- /usr/bin/ghostty -e bash -lc 'echo hi'"},
+		{"gedit --wait", "code --wait"},
+	} {
 		got := launcherCommand(item.before)
 		if got == nil || !got.Safe || got.Replacement != item.after {
 			t.Fatalf("%q: %#v", item.before, got)
 		}
 	}
-	for _, command := range []string{"kitty --class mine", "kitty --hold", "kitty; rm -rf /", "kitty $(touch file)", "kitty -e 'broken", "code --profile mine"} {
+	for _, command := range []string{
+		"kitty --class mine",
+		"kitty --hold",
+		"kitty; rm -rf /",
+		"kitty $(touch file)",
+		"kitty -e 'broken",
+		"code --profile mine",
+	} {
 		got := launcherCommand(command)
 		if got == nil || got.Safe {
 			t.Fatalf("unsafe command recognized: %q %#v", command, got)
@@ -309,7 +346,14 @@ func defaultsDesktopFixtures(t *testing.T, c *Context) {
 	t.Helper()
 	t.Setenv("XDG_DATA_DIRS", filepath.Join(c.Home, "system-data"))
 	t.Setenv("XDG_CURRENT_DESKTOP", "Hyprland")
-	for _, item := range [][2]string{{"com.mitchellh.ghostty.desktop", ""}, {"code.desktop", "application/x-code-workspace;"}, {"obsidian.desktop", "x-scheme-handler/obsidian;"}, {"firefox.desktop", "application/pdf;"}, {"org.gnome.Nautilus.desktop", "inode/directory;"}, {"vlc.desktop", "audio/mpeg;video/mp4;image/png;x-scheme-handler/http;application/ogg;"}} {
+	for _, item := range [][2]string{
+		{"com.mitchellh.ghostty.desktop", ""},
+		{"code.desktop", "application/x-code-workspace;"},
+		{"obsidian.desktop", "x-scheme-handler/obsidian;"},
+		{"firefox.desktop", "application/pdf;"},
+		{"org.gnome.Nautilus.desktop", "inode/directory;"},
+		{"vlc.desktop", "audio/mpeg;video/mp4;image/png;x-scheme-handler/http;application/ogg;"},
+	} {
 		defaultsPut(t, filepath.Join(c.DataHome, "applications", item[0]), "[Desktop Entry]\nType=Application\nMimeType="+item[1]+"\n")
 	}
 	executable := filepath.Join(c.BinDir, "obsidian")
@@ -387,7 +431,12 @@ func TestDefaultsUnsupportedMIMEsPreserveThoseDefaultsAndConfigureOthers(t *test
 		t.Fatal("unsupported advertised types were not reported")
 	}
 	text := defaultsRead(t, mime)
-	for _, part := range []string{"application/pdf=my-pdf.desktop;", "video/mp4=my-player.desktop;", "text/plain=code.desktop;", "text/markdown=" + MarkdownDesktop + ";"} {
+	for _, part := range []string{
+		"application/pdf=my-pdf.desktop;",
+		"video/mp4=my-player.desktop;",
+		"text/plain=code.desktop;",
+		"text/markdown=" + MarkdownDesktop + ";",
+	} {
 		if !strings.Contains(text, part) {
 			t.Fatal(text)
 		}
@@ -414,7 +463,15 @@ func TestDefaultsLuaMultilineUnknownLiteralIsPreserved(t *testing.T) {
 func TestDefaultsChecksAreReadonlyAndVerifyActualHandlers(t *testing.T) {
 	c, r := defaultsContext(t)
 	c.CheckOnly = true
-	expected := map[string]string{"text/plain": "code.desktop", "x-scheme-handler/obsidian": "obsidian.desktop", "text/markdown": MarkdownDesktop, "inode/directory": "org.gnome.Nautilus.desktop", "application/pdf": "firefox.desktop", "audio/mpeg": "vlc.desktop", "video/mp4": "vlc.desktop"}
+	expected := map[string]string{
+		"text/plain":                "code.desktop",
+		"x-scheme-handler/obsidian": "obsidian.desktop",
+		"text/markdown":             MarkdownDesktop,
+		"inode/directory":           "org.gnome.Nautilus.desktop",
+		"application/pdf":           "firefox.desktop",
+		"audio/mpeg":                "vlc.desktop",
+		"video/mp4":                 "vlc.desktop",
+	}
 	r.reply = func(command Command) (CommandResult, error) {
 		a := command.Args
 		out := ""

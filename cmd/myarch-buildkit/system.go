@@ -18,6 +18,7 @@ import (
 )
 
 const systemBinary = "/usr/local/lib/myarch-buildkit/myarch-buildkit"
+
 const systemBackupRoot = "/var/backups/myarch-buildkit"
 
 type systemPayload struct {
@@ -31,6 +32,7 @@ type systemPayload struct {
 	LegacyRecord map[string]any `json:"legacy_record,omitempty"`
 	LegacyRunDir string         `json:"legacy_run_dir,omitempty"`
 }
+
 type systemJournal struct {
 	Path           string         `json:"path"`
 	Backup         string         `json:"backup,omitempty"`
@@ -44,7 +46,11 @@ type systemJournal struct {
 	UID            int            `json:"requester_uid"`
 }
 
-func systemDigest(data []byte) string { sum := sha256.Sum256(data); return hex.EncodeToString(sum[:]) }
+func systemDigest(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
+}
+
 func systemAllowed(path string) bool {
 	switch path {
 	case "/etc/greetd/config.toml", "/etc/greetd/hypr.lua", "/etc/greetd/hyprland.conf", systemBinary, "/usr/share/wayland-sessions/myarch-buildkit.desktop":
@@ -52,6 +58,7 @@ func systemAllowed(path string) bool {
 	}
 	return false
 }
+
 func validRunID(id string) bool {
 	if len(id) < 1 || len(id) > 128 {
 		return false
@@ -63,6 +70,7 @@ func validRunID(id string) bool {
 	}
 	return id != "." && id != ".."
 }
+
 func safeRootPath(root, path string, missing bool) error {
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
 		return fmt.Errorf("unsafe absolute system path: %s", path)
@@ -87,12 +95,14 @@ func safeRootPath(root, path string, missing bool) error {
 	}
 	return nil
 }
+
 func rooted(root, path string) string {
 	if root == "" {
 		return path
 	}
 	return filepath.Join(root, strings.TrimPrefix(path, "/"))
 }
+
 func rootAtomic(path string, data []byte, mode os.FileMode, uid, gid int) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
@@ -120,6 +130,7 @@ func rootAtomic(path string, data []byte, mode os.FileMode, uid, gid int) error 
 	}
 	return os.Rename(name, path)
 }
+
 func rootJournalPaths(root string, uid int, runID, path string) (string, string, error) {
 	if !validRunID(runID) {
 		return "", "", fmt.Errorf("invalid system write run identity")
@@ -139,6 +150,7 @@ func rootJournalPaths(root string, uid int, runID, path string) (string, string,
 	digest := systemDigest([]byte(path))
 	return filepath.Join(real, digest+".json"), filepath.Join(real, digest+".original"), nil
 }
+
 func saveSystemJournal(path string, journal systemJournal) error {
 	data, err := json.MarshalIndent(journal, "", "  ")
 	if err != nil {
@@ -146,6 +158,7 @@ func saveSystemJournal(path string, journal systemJournal) error {
 	}
 	return rootAtomic(path, append(data, '\n'), 0600, 0, 0)
 }
+
 func privilegedWrite(root string, uid int, p systemPayload) (systemJournal, error) {
 	var journal systemJournal
 	if !systemAllowed(p.Path) || len(p.Data) > 64<<20 {
@@ -225,6 +238,7 @@ func privilegedWrite(root string, uid int, p systemPayload) (systemJournal, erro
 	journal.PreviousSHA256 = ""
 	return journal, saveSystemJournal(journalPath, journal)
 }
+
 func privilegedRestore(root string, uid int, p systemPayload) error {
 	if !systemAllowed(p.Path) {
 		return fmt.Errorf("unsupported system restoration path")
@@ -289,6 +303,7 @@ func privilegedRestore(root string, uid int, p systemPayload) error {
 	j.Restored = true
 	return saveSystemJournal(journalPath, j)
 }
+
 func requesterUID() (int, error) {
 	if os.Geteuid() != 0 {
 		return 0, fmt.Errorf("internal system command requires sudo")
@@ -346,6 +361,7 @@ func SystemCommand(args []string) error {
 		return fmt.Errorf("unknown internal command")
 	}
 }
+
 func rootOperation(c *Context, command string, p systemPayload) (CommandResult, error) {
 	data, err := json.Marshal(p)
 	if err != nil {
@@ -353,7 +369,9 @@ func rootOperation(c *Context, command string, p systemPayload) (CommandResult, 
 	}
 	return c.Command(Command{Args: []string{"sudo", "-n", systemBinary, command}, Input: data})
 }
+
 func (c *Context) systemRunID() string { return "go-" + systemDigest([]byte(c.RunDir))[:24] }
+
 func appendSystemRecord(c *Context, record map[string]any) {
 	list := []any{}
 	switch records := c.Report["system_changes"].(type) {
@@ -380,6 +398,7 @@ func appendSystemRecord(c *Context, record map[string]any) {
 	}
 	c.Report["system_changes"] = append(list, record)
 }
+
 func (c *Context) SystemWrite(path string, data []byte, mode os.FileMode) error {
 	if err := c.Err(); err != nil {
 		return err
@@ -395,6 +414,7 @@ func (c *Context) SystemWrite(path string, data []byte, mode os.FileMode) error 
 	}
 	return systemWriteReady(c, path, data, mode, false)
 }
+
 func systemWriteReady(c *Context, path string, data []byte, mode os.FileMode, newInstall bool) error {
 	record := map[string]any{"path": path, "run_id": c.systemRunID(), "pending_sha256": systemDigest(data), "write_journal_version": 3}
 	appendSystemRecord(c, record)
@@ -413,6 +433,7 @@ func systemWriteReady(c *Context, path string, data []byte, mode os.FileMode, ne
 	appendSystemRecord(c, details)
 	return c.Save()
 }
+
 func RestoreSystem(c *Context, record map[string]any) error {
 	path, _ := record["path"].(string)
 	runID, _ := record["run_id"].(string)
@@ -426,6 +447,7 @@ func RestoreSystem(c *Context, record map[string]any) error {
 	_, err := rootOperation(c, "internal-restore", systemPayload{Path: path, RunID: runID})
 	return err
 }
+
 func bootstrapRootBinary(c *Context) error {
 	if c.rootBinaryReady {
 		return verifyInstalledRootBinary(c)
@@ -489,7 +511,13 @@ func bootstrapRootBinary(c *Context) error {
 			return fmt.Errorf("cannot verify root binary parent directory: %s", path)
 		}
 	}
-	appendSystemRecord(c, map[string]any{"path": systemBinary, "run_id": c.systemRunID(), "pending_sha256": systemDigest(data), "write_journal_version": 3, "initial_install": true})
+	appendSystemRecord(c, map[string]any{
+		"path":                  systemBinary,
+		"run_id":                c.systemRunID(),
+		"pending_sha256":        systemDigest(data),
+		"write_journal_version": 3,
+		"initial_install":       true,
+	})
 	if err = c.Save(); err != nil {
 		return err
 	}
@@ -520,6 +548,7 @@ func bootstrapRootBinary(c *Context) error {
 	c.rootBinaryReady = true
 	return nil
 }
+
 func verifyInstalledRootBinary(c *Context) error {
 	for _, path := range []string{"/usr", "/usr/local", "/usr/local/lib", filepath.Dir(systemBinary), systemBinary} {
 		result, err := c.Run("sudo", "-n", "/usr/bin/stat", "-c", "%u:%a:%F", "--", path)
@@ -532,6 +561,7 @@ func verifyInstalledRootBinary(c *Context) error {
 	}
 	return nil
 }
+
 func validateRootStat(path, text string) error {
 	fields := strings.Split(strings.TrimSpace(text), ":")
 	if len(fields) != 3 || fields[0] != "0" {
@@ -543,6 +573,7 @@ func validateRootStat(path, text string) error {
 	}
 	return nil
 }
+
 func InstallLogin(c *Context) error {
 	if err := bootstrapRootBinary(c); err != nil {
 		return err
@@ -554,6 +585,7 @@ func InstallLogin(c *Context) error {
 	c.Note("At the next login select myarch-buildkit to apply the pending bundle before Hyprland starts.")
 	return nil
 }
+
 func executeRoot(args ...string) (string, error) {
 	cmd := exec.Command(args[0], args[1:]...)
 	output, err := cmd.CombinedOutput()
@@ -574,6 +606,7 @@ func legacySystemAllowed(path string) bool {
 	}
 	return false
 }
+
 func secureLegacyBackup(root, path string, uid int) error {
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
 		return fmt.Errorf("invalid legacy backup path")
@@ -602,6 +635,7 @@ func secureLegacyBackup(root, path string, uid int) error {
 	}
 	return nil
 }
+
 func privilegedLegacyRestore(root string, uid int, p systemPayload) error {
 	record := p.LegacyRecord
 	path, _ := record["path"].(string)

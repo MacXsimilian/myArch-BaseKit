@@ -208,8 +208,10 @@ func unifiedProfileFixture(t *testing.T) (*Context, *Context, string) {
 	desktop.Report = map[string]any{"schema_version": 1}
 	desktop.ensureReport()
 	if err := WriteJSON(reportPath, map[string]any{
-		"format": RunReportFormat, "schema_version": RunReportSchemaVersion,
-		"status": "pending_login", "profiles": map[string]any{},
+		"format":         RunReportFormat,
+		"schema_version": RunReportSchemaVersion,
+		"status":         "pending_login",
+		"profiles":       map[string]any{},
 		"stages": map[string]any{
 			"laptop":  map[string]any{"status": "pending_login", "artifacts": laptop.RunDir},
 			"desktop": map[string]any{"status": "pending_login", "artifacts": desktop.RunDir},

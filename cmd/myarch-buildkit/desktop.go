@@ -15,26 +15,99 @@ import (
 )
 
 var DMSSettings = map[string]any{
-	"frameEnabled": true, "frameMode": "connected", "frameScreenPreferences": []string{"all"},
-	"showDock": true, "dockPosition": 1, "dockAutoHide": false, "dockSmartAutoHide": false, "dockUseOverlayLayer": false, "dockGroupByApp": true, "dockOpenOnOverview": false,
-	"launcherStyle": "full", "rememberLastMode": false, "rememberLastQuery": false, "dankLauncherV2IncludeFilesInAll": false, "dankLauncherV2IncludeFoldersInAll": false,
-	"clockFormat": "24h", "clockDateFormat": "ddd d MMM", "showSeconds": false, "showWorkspaceIndex": true, "showWorkspaceName": false, "workspaceFollowFocus": false,
-	"notificationHistoryEnabled": true, "soundNewNotification": false, "weatherEnabled": false, "useAutoLocation": false, "controlCenterShowNetworkIcon": true, "controlCenterShowAudioIcon": true,
+	"frameEnabled":                      true,
+	"frameMode":                         "connected",
+	"frameScreenPreferences":            []string{"all"},
+	"showDock":                          true,
+	"dockPosition":                      1,
+	"dockAutoHide":                      false,
+	"dockSmartAutoHide":                 false,
+	"dockUseOverlayLayer":               false,
+	"dockGroupByApp":                    true,
+	"dockOpenOnOverview":                false,
+	"launcherStyle":                     "full",
+	"rememberLastMode":                  false,
+	"rememberLastQuery":                 false,
+	"dankLauncherV2IncludeFilesInAll":   false,
+	"dankLauncherV2IncludeFoldersInAll": false,
+	"clockFormat":                       "24h",
+	"clockDateFormat":                   "ddd d MMM",
+	"showSeconds":                       false,
+	"showWorkspaceIndex":                true,
+	"showWorkspaceName":                 false,
+	"workspaceFollowFocus":              false,
+	"notificationHistoryEnabled":        true,
+	"soundNewNotification":              false,
+	"weatherEnabled":                    false,
+	"useAutoLocation":                   false,
+	"controlCenterShowNetworkIcon":      true,
+	"controlCenterShowAudioIcon":        true,
 }
+
 var DMSBar = map[string]any{
-	"id": "default", "name": "Main Bar", "enabled": true, "position": 0, "screenPreferences": []string{"all"}, "showOnLastDisplay": true,
-	"leftWidgets": []string{"workspaceSwitcher", "focusedWindow"}, "centerWidgets": []string{"clock"},
-	"rightWidgets":       []string{"dockerManager", "kubernetes", "bongoCat", "clipboardPlus", "systemTray", "notificationButton", "battery", "controlCenterButton"},
-	"attachToScreenEdge": true, "autoHide": false, "visible": true, "useOverlayLayer": false,
+	"id":                "default",
+	"name":              "Main Bar",
+	"enabled":           true,
+	"position":          0,
+	"screenPreferences": []string{"all"},
+	"showOnLastDisplay": true,
+	"leftWidgets":       []string{"workspaceSwitcher", "focusedWindow"},
+	"centerWidgets":     []string{"clock"},
+	"rightWidgets": []string{
+		"dockerManager",
+		"kubernetes",
+		"bongoCat",
+		"clipboardPlus",
+		"systemTray",
+		"notificationButton",
+		"battery",
+		"controlCenterButton",
+	},
+	"attachToScreenEdge": true,
+	"autoHide":           false,
+	"visible":            true,
+	"useOverlayLayer":    false,
 }
-var DMSSession = map[string]any{"doNotDisturb": false, "doNotDisturbUntil": 0, "terminalOverride": "ghostty", "nightModeEnabled": false, "nightModeAutoEnabled": false, "launcherLastMode": "apps", "launcherLastQuery": "", "appDrawerLastMode": "apps"}
-var DesktopCompetitors = []string{"noctalia", "noctalia-shell", "waybar", "mako", "dunst", "swaync", "hyprpolkitagent", "polkit-gnome-authentication-agent-1", "nm-applet"}
-var CompetingDesktopUnits = []string{"noctalia.service", "noctalia-shell.service", "waybar.service", "mako.service", "dunst.service", "swaync.service", "hyprpolkitagent.service", "nm-applet.service"}
+
+var DMSSession = map[string]any{
+	"doNotDisturb":         false,
+	"doNotDisturbUntil":    0,
+	"terminalOverride":     "ghostty",
+	"nightModeEnabled":     false,
+	"nightModeAutoEnabled": false,
+	"launcherLastMode":     "apps",
+	"launcherLastQuery":    "",
+	"appDrawerLastMode":    "apps",
+}
+
+var DesktopCompetitors = []string{
+	"noctalia",
+	"noctalia-shell",
+	"waybar",
+	"mako",
+	"dunst",
+	"swaync",
+	"hyprpolkitagent",
+	"polkit-gnome-authentication-agent-1",
+	"nm-applet",
+}
+
+var CompetingDesktopUnits = []string{
+	"noctalia.service",
+	"noctalia-shell.service",
+	"waybar.service",
+	"mako.service",
+	"dunst.service",
+	"swaync.service",
+	"hyprpolkitagent.service",
+	"nm-applet.service",
+}
+
 var DMSSources = []string{
-	"https://github.com/AvengeMedia/DankMaterialShell/blob/v1.6.2/quickshell/Common/settings/SettingsSpec.js",
-	"https://github.com/AvengeMedia/DankMaterialShell/blob/v1.6.2/quickshell/Common/settings/SessionSpec.js",
-	"https://github.com/AvengeMedia/DankMaterialShell/blob/v1.6.2/core/internal/server/clipboard/types.go",
-	"https://github.com/AvengeMedia/DankMaterialShell/blob/v1.6.2/assets/systemd/dms.service",
+	"https://github.com/duxlabs-dev/dux-shell/blob/v2.0.0/quickshell/Common/settings/SettingsSpec.js",
+	"https://github.com/duxlabs-dev/dux-shell/blob/v2.0.0/quickshell/Common/settings/SessionSpec.js",
+	"https://github.com/duxlabs-dev/dux-shell/blob/v2.0.0/core/internal/server/clipboard/types.go",
+	"https://github.com/duxlabs-dev/dux-shell/blob/v2.0.0/assets/systemd/dms.service",
 	"https://danklinux.com/docs/dankmaterialshell/keybinds-ipc",
 	"https://wiki.hypr.land/configuring/core/dispatchers/",
 	"https://github.com/hyprwm/Hyprland/blob/main/example/hyprland.lua",
@@ -48,6 +121,7 @@ func desktopCloneObject(source map[string]any) map[string]any {
 	}
 	return copy
 }
+
 func desktopSafeText(path string, owned bool) (string, error) {
 	info, err := os.Lstat(path)
 	if os.IsNotExist(err) {
@@ -70,6 +144,7 @@ func desktopSafeText(path string, owned bool) (string, error) {
 	raw, err := os.ReadFile(path)
 	return string(raw), err
 }
+
 func desktopReadObject(path string, version *int) (map[string]any, error) {
 	text, err := desktopSafeText(path, true)
 	if err != nil {
@@ -91,6 +166,7 @@ func desktopReadObject(path string, version *int) (map[string]any, error) {
 	}
 	return value, nil
 }
+
 func desktopWriteObject(c *Context, path string, value map[string]any, mode os.FileMode) error {
 	raw, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
@@ -98,73 +174,11 @@ func desktopWriteObject(c *Context, path string, value map[string]any, mode os.F
 	}
 	return c.Write(path, append(raw, '\n'), mode)
 }
+
 func mapKeyPresent(source, key string) bool {
 	return regexp.MustCompile(`\b` + regexp.QuoteMeta(key) + `\s*:`).MatchString(source)
 }
-func VerifyDMSSchema(c *Context) (string, error) {
-	roots := []string{}
-	if root, ok := c.Inventory["dms_qml_root"].(string); ok && root != "" {
-		roots = append(roots, root)
-	}
-	listed := c.Try("pacman", "-Ql", "dms-shell")
-	if listed.Code == 0 {
-		for _, line := range strings.Split(listed.Stdout, "\n") {
-			fields := strings.Fields(line)
-			if len(fields) == 2 && strings.HasSuffix(fields[1], "/Common/SettingsData.qml") {
-				root := filepath.Dir(filepath.Dir(fields[1]))
-				if !desktopContainsString(roots, root) {
-					roots = append(roots, root)
-				}
-			}
-		}
-	}
-	for _, root := range roots {
-		data, e := desktopSafeText(filepath.Join(root, "Common/SettingsData.qml"), false)
-		if e != nil {
-			continue
-		}
-		settings, e := desktopSafeText(filepath.Join(root, "Common/settings/SettingsSpec.js"), false)
-		if e != nil {
-			continue
-		}
-		session, e := desktopSafeText(filepath.Join(root, "Common/SessionData.qml"), false)
-		if e != nil {
-			continue
-		}
-		sessionSpec, e := desktopSafeText(filepath.Join(root, "Common/settings/SessionSpec.js"), false)
-		if e != nil {
-			continue
-		}
-		if !regexp.MustCompile(`settingsConfigVersion\s*:\s*18\b`).MatchString(data) || !regexp.MustCompile(`sessionConfigVersion\s*:\s*4\b`).MatchString(session) {
-			continue
-		}
-		valid := true
-		for key := range DMSSettings {
-			valid = valid && mapKeyPresent(settings, key)
-		}
-		for _, key := range []string{"barConfigs", "screenPreferences"} {
-			valid = valid && mapKeyPresent(settings, key)
-		}
-		for key := range DMSSession {
-			valid = valid && mapKeyPresent(sessionSpec, key)
-		}
-		for _, key := range []string{"pinnedApps", "wallpaperPath"} {
-			valid = valid && mapKeyPresent(sessionSpec, key)
-		}
-		if valid {
-			return root, nil
-		}
-	}
-	if len(roots) == 0 {
-		pkg := c.Try("pacman", "-Q", "dms-shell")
-		version := c.Try("dms", "version")
-		c.Report["dms_version_detection"] = map[string]any{"command": []string{"dms", "version"}, "package": strings.TrimSpace(pkg.Stdout), "package_exit_code": pkg.Code, "version_stdout": strings.TrimSpace(version.Stdout), "version_stderr": strings.TrimSpace(version.Stderr), "version_exit_code": version.Code}
-		if pkg.Code == 0 && version.Code == 0 && regexp.MustCompile(`^dms-shell\s+(?:\d+:)?1\.6\.2-[A-Za-z0-9.]+\s*$`).MatchString(pkg.Stdout) && regexp.MustCompile(`\bv?1\.6\.2\b`).MatchString(version.Stdout) {
-			return "", nil
-		}
-	}
-	return "", fmt.Errorf("DMS's installed settings schema is unverified; this profile supports SettingsSpec 18 / SessionSpec 4 (DMS 1.6.2); existing desktop files were preserved")
-}
+
 func DesktopFormat(c *Context) (string, string, error) {
 	main, ok := c.Inventory["active_config"].(string)
 	if !ok || main == "" {
@@ -176,17 +190,10 @@ func DesktopFormat(c *Context) (string, string, error) {
 	if _, err := desktopSafeText(main, true); err != nil {
 		return "", "", err
 	}
-	match := regexp.MustCompile(`\b(?:v)?(\d+)\.(\d+)\.(\d+)\b`).FindStringSubmatch(str(c.Inventory["hyprland_version"]))
-	if len(match) > 0 && match[1] == "0" {
-		if filepath.Ext(main) == ".lua" && (match[2] == "55" || match[2] == "56") {
-			return main, "lua", nil
-		}
-		if filepath.Ext(main) == ".conf" && match[2] == "54" {
-			return main, "hyprlang", nil
-		}
-	}
-	return "", "", fmt.Errorf("unverified Hyprland version/config format; supported: Lua 0.55/0.56 or hyprland.conf 0.54; existing configuration was preserved")
+	format, err := hyprlandConfigFormat(main)
+	return main, format, err
 }
+
 func DesktopPins(c *Context) ([]string, error) {
 	roots := []string{filepath.Join(c.DataHome, "applications")}
 	dirs := os.Getenv("XDG_DATA_DIRS")
@@ -199,7 +206,11 @@ func DesktopPins(c *Context) ([]string, error) {
 		}
 	}
 	result := []string{}
-	for _, choices := range [][]string{{"com.mitchellh.ghostty", "ghostty"}, {"org.gnome.Nautilus"}, {"code", "visual-studio-code", "com.microsoft.VSCode"}} {
+	for _, choices := range [][]string{
+		{"com.mitchellh.ghostty", "ghostty"},
+		{"org.gnome.Nautilus"},
+		{"code", "visual-studio-code", "com.microsoft.VSCode"},
+	} {
 		found := ""
 		for _, choice := range choices {
 			for _, root := range roots {
@@ -269,6 +280,7 @@ func splitDesktopCommand(text string) ([]string, error) {
 	}
 	return words, nil
 }
+
 func knownDesktopCompetitor(command string) string {
 	for _, unsafe := range []string{";", "&&", "||", "`", "$(", "\n"} {
 		if strings.Contains(command, unsafe) {
@@ -289,7 +301,7 @@ func knownDesktopCompetitor(command string) string {
 		return ""
 	}
 	base := filepath.Base(args[0])
-	if desktopContainsString(DesktopCompetitors, base) {
+	if contains(DesktopCompetitors, base) {
 		return base
 	}
 	if (base == "qs" || base == "quickshell") && len(args) >= 3 && (args[1] == "-c" || args[1] == "--config") && (args[2] == "noctalia" || args[2] == "noctalia-shell") {
@@ -297,6 +309,7 @@ func knownDesktopCompetitor(command string) string {
 	}
 	return ""
 }
+
 func DesktopAutostarts(c *Context) (map[string]string, error) {
 	dirs := os.Getenv("XDG_CONFIG_DIRS")
 	if dirs == "" {
@@ -363,13 +376,14 @@ func DesktopAutostarts(c *Context) (map[string]string, error) {
 	}
 	return result, nil
 }
+
 func existingImage(path string) string {
 	if strings.HasPrefix(path, "~/") {
 		home, _ := os.UserHomeDir()
 		path = filepath.Join(home, path[2:])
 	}
 	extension := strings.ToLower(filepath.Ext(path))
-	if !desktopContainsString([]string{".png", ".jpg", ".jpeg", ".webp", ".avif", ".bmp", ".gif", ".jxl"}, extension) || !filepath.IsAbs(path) {
+	if !contains([]string{".png", ".jpg", ".jpeg", ".webp", ".avif", ".bmp", ".gif", ".jxl"}, extension) || !filepath.IsAbs(path) {
 		return ""
 	}
 	info, e := os.Stat(path)
@@ -382,6 +396,7 @@ func existingImage(path string) string {
 	}
 	return resolved
 }
+
 func wallpaperImages(value any, images map[string]bool) {
 	switch v := value.(type) {
 	case string:
@@ -398,8 +413,16 @@ func wallpaperImages(value any, images map[string]bool) {
 		}
 	}
 }
+
 func PreserveWallpaper(c *Context, session map[string]any) map[string]any {
-	for _, key := range []string{"wallpaperPath", "wallpaperPathLight", "wallpaperPathDark", "monitorWallpapers", "monitorWallpapersLight", "monitorWallpapersDark"} {
+	for _, key := range []string{
+		"wallpaperPath",
+		"wallpaperPathLight",
+		"wallpaperPathDark",
+		"monitorWallpapers",
+		"monitorWallpapersLight",
+		"monitorWallpapersDark",
+	} {
 		if value, ok := session[key]; ok && value != nil && value != "" {
 			switch v := value.(type) {
 			case map[string]any:
@@ -435,7 +458,11 @@ func PreserveWallpaper(c *Context, session map[string]any) map[string]any {
 	}
 	if candidate == "" {
 		images := map[string]bool{}
-		for _, path := range []string{filepath.Join(c.ConfigHome, "noctalia/settings.json"), filepath.Join(c.ConfigHome, "noctalia/config.toml"), filepath.Join(c.StateHome, "noctalia/settings.toml")} {
+		for _, path := range []string{
+			filepath.Join(c.ConfigHome, "noctalia/settings.json"),
+			filepath.Join(c.ConfigHome, "noctalia/config.toml"),
+			filepath.Join(c.StateHome, "noctalia/settings.toml"),
+		} {
 			text, err := desktopSafeText(path, true)
 			if err != nil {
 				continue
@@ -496,8 +523,24 @@ func PreserveWallpaper(c *Context, session map[string]any) map[string]any {
 }
 
 func DesktopConfigText(format, startup, screenshot, clipboard, fragment string) (string, error) {
-	apps := [][2]string{{"SUPER + Return", "ghostty"}, {"SUPER + E", "nautilus"}, {"SUPER + C", "code"}, {"SUPER + space", "dms ipc call spotlight toggleWith apps"}, {"SUPER + L", "dms ipc call lock lock"}, {"SUPER + V", shellQuote(clipboard) + " show"}, {"Print", shellQuote(screenshot) + " region"}, {"SHIFT + Print", shellQuote(screenshot) + " focused"}}
-	media := [][2]string{{"XF86AudioRaiseVolume", "dms ipc call audio increment 5"}, {"XF86AudioLowerVolume", "dms ipc call audio decrement 5"}, {"XF86AudioMute", "dms ipc call audio mute"}, {"XF86AudioMicMute", "dms ipc call audio micmute"}, {"XF86MonBrightnessUp", "dms ipc call brightness increment 5 ''"}, {"XF86MonBrightnessDown", "dms ipc call brightness decrement 5 ''"}}
+	apps := [][2]string{
+		{"SUPER + Return", "ghostty"},
+		{"SUPER + E", "nautilus"},
+		{"SUPER + C", "code"},
+		{"SUPER + space", "dms ipc call spotlight toggleWith apps"},
+		{"SUPER + L", "dms ipc call lock lock"},
+		{"SUPER + V", shellQuote(clipboard) + " show"},
+		{"Print", shellQuote(screenshot) + " region"},
+		{"SHIFT + Print", shellQuote(screenshot) + " focused"},
+	}
+	media := [][2]string{
+		{"XF86AudioRaiseVolume", "dms ipc call audio increment 5"},
+		{"XF86AudioLowerVolume", "dms ipc call audio decrement 5"},
+		{"XF86AudioMute", "dms ipc call audio mute"},
+		{"XF86AudioMicMute", "dms ipc call audio micmute"},
+		{"XF86MonBrightnessUp", "dms ipc call brightness increment 5 ''"},
+		{"XF86MonBrightnessDown", "dms ipc call brightness decrement 5 ''"},
+	}
 	lines := []string{}
 	for _, path := range []string{startup, screenshot, clipboard, fragment} {
 		for _, r := range path {
@@ -558,9 +601,11 @@ func DesktopConfigText(format, startup, screenshot, clipboard, fragment string) 
 	}
 	return strings.Join(lines, "\n") + "\n", nil
 }
+
 func helperWrapper(c *Context, command string) string {
 	return "#!/bin/sh\nexec " + shellQuote(c.Binary) + " " + command + " \"$@\"\n"
 }
+
 func ConfigureDesktop(c *Context) (result error) {
 	report := map[string]any{"status": "checking", "configured": false, "activated": false, "sources": DMSSources}
 	c.Report["profile_config"] = report
@@ -579,10 +624,15 @@ func ConfigureDesktop(c *Context) (result error) {
 	if err != nil {
 		return err
 	}
-	settingsPath := filepath.Join(c.ConfigHome, "DankMaterialShell/settings.json")
-	sessionPath := filepath.Join(c.StateHome, "DankMaterialShell/session.json")
-	clipboardPath := filepath.Join(c.ConfigHome, "DankMaterialShell/clsettings.json")
-	settingsVersion, sessionVersion := 18, 4
+	if err := requireDMSMigration(c); err != nil {
+		return err
+	}
+	settingsPath := filepath.Join(c.ConfigHome, dmsDirectory(c), "settings.json")
+	sessionPath := filepath.Join(c.StateHome, dmsDirectory(c), "session.json")
+	clipboardPath := filepath.Join(c.ConfigHome, dmsDirectory(c), "clsettings.json")
+	settingsVersion := int(mapJSONNumber(c.Inventory["dms_settings_version"]))
+	sessionVersion := int(mapJSONNumber(c.Inventory["dms_session_version"]))
+	defaults := desktopSettings(c)
 	settings, err := desktopReadObject(c.View(settingsPath), &settingsVersion)
 	if err != nil {
 		return err
@@ -604,13 +654,13 @@ func ConfigureDesktop(c *Context) (result error) {
 		return err
 	}
 	wallpaper := PreserveWallpaper(c, session)
-	for key, value := range DMSSettings {
+	for key, value := range defaults {
 		settings[key] = value
 	}
-	if _, ok := settings["showOccupiedWorkspacesOnly"]; !ok {
+	if _, ok := settings["showOccupiedWorkspacesOnly"]; !ok && !boolValue(c.Inventory["dms_dock_configs"]) {
 		settings["showOccupiedWorkspacesOnly"] = true
 	}
-	settings["configVersion"] = 18
+	settings["configVersion"] = settingsVersion
 	settings["barConfigs"] = []map[string]any{desktopCloneObject(DMSBar)}
 	screenPrefs := map[string]any{}
 	if previous, ok := settings["screenPreferences"]; ok {
@@ -626,8 +676,14 @@ func ConfigureDesktop(c *Context) (result error) {
 	for key, value := range DMSSession {
 		session[key] = value
 	}
-	session["configVersion"] = 4
-	session["pinnedApps"] = pins
+	session["configVersion"] = sessionVersion
+	if boolValue(c.Inventory["dms_dock_configs"]) {
+		dockPins := desktopCloneObject(object(session["dockPins"]))
+		dockPins["dock"] = pins
+		session["dockPins"] = dockPins
+	} else {
+		session["pinnedApps"] = pins
+	}
 	enabled := clipboard["disabled"] == false
 	clipboardUpdates := map[string]any{"maxHistory": 100, "autoClearDays": 0, "clearAtStartup": true, "disabled": !enabled}
 	for key, value := range clipboardUpdates {
@@ -698,16 +754,20 @@ func ConfigureDesktop(c *Context) (result error) {
 	if err = c.Write(main, []byte(loader), 0600); err != nil {
 		return err
 	}
-	updates := desktopCloneObject(DMSSettings)
-	updates["configVersion"] = 18
+	updates := desktopCloneObject(defaults)
+	updates["configVersion"] = settingsVersion
 	updates["barConfigs"] = []map[string]any{desktopCloneObject(DMSBar)}
 	updates["screenPreferences"] = map[string]any{"dock": []string{"all"}}
 	if err = c.OverrideJSON(settingsPath, updates); err != nil {
 		return err
 	}
 	sessionUpdates := desktopCloneObject(DMSSession)
-	sessionUpdates["configVersion"] = 4
-	sessionUpdates["pinnedApps"] = pins
+	sessionUpdates["configVersion"] = sessionVersion
+	if boolValue(c.Inventory["dms_dock_configs"]) {
+		sessionUpdates["dockPins"] = map[string]any{"dock": pins}
+	} else {
+		sessionUpdates["pinnedApps"] = pins
+	}
 	if err = c.OverrideJSON(sessionPath, sessionUpdates); err != nil {
 		return err
 	}
@@ -724,9 +784,12 @@ func ConfigureDesktop(c *Context) (result error) {
 	report["settings"] = settingsPath
 	report["session"] = sessionPath
 	report["source_root"] = root
+	report["dms_version"] = c.Inventory["dms_version"]
+	report["settings_schema"] = settingsVersion
+	report["session_schema"] = sessionVersion
 	report["schema_verification"] = "installed source"
 	if root == "" {
-		report["schema_verification"] = "embedded QML, verified upstream dms-shell 1.6.2"
+		report["schema_verification"] = "embedded QML, verified upstream release " + str(c.Inventory["dms_version"])
 	}
 	report["startup_script"] = startup
 	report["startup_command"] = []string{startup}
@@ -737,14 +800,28 @@ func ConfigureDesktop(c *Context) (result error) {
 	report["wallpaper"] = wallpaper
 	report["pinned_apps"] = pins
 	report["launchers"] = map[string]any{"terminal": "ghostty", "files": "nautilus", "editor": "code"}
-	report["screenshot"] = map[string]any{"helper": screenshot, "commands": []string{"region", "focused"}, "directory": filepath.Join(c.Home, "Pictures/Screenshots")}
-	report["clipboard"] = map[string]any{"enabled": enabled, "max_history": 100, "clear_at_startup": true, "bitwarden_check": "manual_dummy_item_required", "may_use_disk": true, "instructions": []string{clipboardHelper, "instructions"}, "enable": []string{clipboardHelper, "enable"}, "disable": []string{clipboardHelper, "disable"}}
+	report["screenshot"] = map[string]any{
+		"helper":    screenshot,
+		"commands":  []string{"region", "focused"},
+		"directory": filepath.Join(c.Home, "Pictures/Screenshots"),
+	}
+	report["clipboard"] = map[string]any{
+		"enabled":          enabled,
+		"max_history":      100,
+		"clear_at_startup": true,
+		"bitwarden_check":  "manual_dummy_item_required",
+		"may_use_disk":     true,
+		"instructions":     []string{clipboardHelper, "instructions"},
+		"enable":           []string{clipboardHelper, "enable"},
+		"disable":          []string{clipboardHelper, "disable"},
+	}
 	c.Note("DMS Frame Mode, top bar, visible bottom dock and the accepted Hyprland keymap are staged for native validation.")
 	if !enabled {
 		c.Note("Clipboard history is staged at 100 items and clear-on-start, initially disabled. Run cachyos-clipboard instructions for the Bitwarden dummy-item check.")
 	}
 	return nil
 }
+
 func CheckDesktop(c *Context) error {
 	record := object(c.Report["running_desktop"])
 	failures := []string{}
@@ -771,7 +848,7 @@ func CheckDesktop(c *Context) error {
 				failures = append(failures, "DMS plugin is not loaded: "+plugin.ID)
 			}
 		}
-		if !desktopContainsString(strings.Fields(c.Try("id", "-nG").Stdout), "input") {
+		if !contains(strings.Fields(c.Try("id", "-nG").Stdout), "input") {
 			failures = append(failures, "Bongo Cat needs input-group membership and a new login to monitor typing; see the guide")
 		}
 		for _, unit := range []string{"dms.service", "cachyos-dms-direct.service"} {

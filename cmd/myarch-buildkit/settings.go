@@ -13,11 +13,36 @@ import (
 	"strings"
 )
 
-var StageOrder = []string{"preflight", "packages", "defaults", "shell", "containers", "laptop", "desktop", "greeter", "verify", "cleanup"}
+var StageOrder = []string{
+	"preflight",
+	"packages",
+	"defaults",
+	"shell",
+	"containers",
+	"laptop",
+	"desktop",
+	"greeter",
+	"verify",
+	"cleanup",
+}
+
 var GroupOrder = []string{"core", "utilities", "development", "containers"}
 
 func DefaultSettings() Settings {
-	return Settings{2, map[string]bool{"core": true, "utilities": true, "development": true, "containers": true}, LaptopSettings{"4/3", "hu", true}}
+	return Settings{
+		SchemaVersion: 2,
+		PackageGroups: map[string]bool{
+			"core":        true,
+			"utilities":   true,
+			"development": true,
+			"containers":  true,
+		},
+		Laptop: LaptopSettings{
+			InternalScale:    "4/3",
+			InternalKeyboard: "hu",
+			NaturalScroll:    true,
+		},
+	}
 }
 
 func parseScaleValue(value any) (float64, error) {
@@ -39,6 +64,7 @@ func parseScaleValue(value any) (float64, error) {
 	}
 	return n, nil
 }
+
 func LoadSettings(path string) (Settings, error) {
 	settings := DefaultSettings()
 	if path != "" {
@@ -126,7 +152,10 @@ func settingsFromRunReport(report map[string]json.RawMessage) ([]byte, map[strin
 	for _, required := range []struct {
 		key    string
 		fields []string
-	}{{"package_groups", GroupOrder}, {"laptop", []string{"internal_scale", "internal_keyboard", "natural_scroll"}}} {
+	}{
+		{"package_groups", GroupOrder},
+		{"laptop", []string{"internal_scale", "internal_keyboard", "natural_scroll"}},
+	} {
 		var fields map[string]json.RawMessage
 		if json.Unmarshal(snapshot[required.key], &fields) != nil || fields == nil {
 			return nil, nil, fmt.Errorf("run report settings.%s must be a JSON object", required.key)
@@ -139,6 +168,7 @@ func settingsFromRunReport(report map[string]json.RawMessage) ([]byte, map[strin
 	}
 	return data, snapshot, nil
 }
+
 func contains(values []string, want string) bool {
 	for _, v := range values {
 		if v == want {
@@ -147,6 +177,7 @@ func contains(values []string, want string) bool {
 	}
 	return false
 }
+
 func xdgPath(name, fallback string) (string, error) {
 	value := os.Getenv(name)
 	if value == "" {
@@ -166,11 +197,31 @@ func NewContext(runDir string, settings Settings, opts Options, runner Runner) (
 	if !filepath.IsAbs(home) {
 		return nil, errors.New("HOME must be absolute")
 	}
-	c := &Context{Home: filepath.Clean(home), RunDir: runDir, Settings: settings, Options: opts, Runner: runner, Inventory: map[string]any{}, Report: map[string]any{"schema_version": 1, "status": "pending", "warnings": []string{}, "notes": []string{}, "file_changes": []any{}, "system_changes": []any{}}}
+	c := &Context{
+		Home:      filepath.Clean(home),
+		RunDir:    runDir,
+		Settings:  settings,
+		Options:   opts,
+		Runner:    runner,
+		Inventory: map[string]any{},
+		Report: map[string]any{
+			"schema_version": 1,
+			"status":         "pending",
+			"warnings":       []string{},
+			"notes":          []string{},
+			"file_changes":   []any{},
+			"system_changes": []any{},
+		},
+	}
 	for _, row := range []struct {
 		name, fallback string
 		target         *string
-	}{{"XDG_CONFIG_HOME", filepath.Join(home, ".config"), &c.ConfigHome}, {"XDG_STATE_HOME", filepath.Join(home, ".local/state"), &c.StateHome}, {"XDG_DATA_HOME", filepath.Join(home, ".local/share"), &c.DataHome}, {"XDG_CACHE_HOME", filepath.Join(home, ".cache"), &c.CacheHome}} {
+	}{
+		{"XDG_CONFIG_HOME", filepath.Join(home, ".config"), &c.ConfigHome},
+		{"XDG_STATE_HOME", filepath.Join(home, ".local/state"), &c.StateHome},
+		{"XDG_DATA_HOME", filepath.Join(home, ".local/share"), &c.DataHome},
+		{"XDG_CACHE_HOME", filepath.Join(home, ".cache"), &c.CacheHome},
+	} {
 		*row.target, err = xdgPath(row.name, row.fallback)
 		if err != nil {
 			return nil, err

@@ -43,6 +43,7 @@ func DesktopSession(c *Context) error {
 	syscall.Close(fd)
 	return err
 }
+
 func ScreenshotMain(c *Context, args []string) (result error) {
 	if len(args) != 1 || (args[0] != "region" && args[0] != "focused") {
 		return fmt.Errorf("usage: cachyos-screenshot region|focused")

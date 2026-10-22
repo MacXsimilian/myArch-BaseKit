@@ -12,13 +12,44 @@ import (
 	"unicode"
 )
 
-var terminalPrograms = map[string]bool{"kitty": true, "alacritty": true, "foot": true, "footclient": true, "konsole": true, "cosmic-term": true, "wezterm": true, "xterm": true, "xfce4-terminal": true, "gnome-terminal": true, "qterminal": true, "terminator": true, "ghostty": true}
-var editorPrograms = map[string]bool{"gnome-text-editor": true, "cosmic-edit": true, "gedit": true, "kate": true, "mousepad": true, "leafpad": true, "xed": true, "code": true, "code-oss": true, "codium": true, "nvim": true, "gvim": true}
+var terminalPrograms = map[string]bool{
+	"kitty":          true,
+	"alacritty":      true,
+	"foot":           true,
+	"footclient":     true,
+	"konsole":        true,
+	"cosmic-term":    true,
+	"wezterm":        true,
+	"xterm":          true,
+	"xfce4-terminal": true,
+	"gnome-terminal": true,
+	"qterminal":      true,
+	"terminator":     true,
+	"ghostty":        true,
+}
+
+var editorPrograms = map[string]bool{
+	"gnome-text-editor": true,
+	"cosmic-edit":       true,
+	"gedit":             true,
+	"kate":              true,
+	"mousepad":          true,
+	"leafpad":           true,
+	"xed":               true,
+	"code":              true,
+	"code-oss":          true,
+	"codium":            true,
+	"nvim":              true,
+	"gvim":              true,
+}
+
 var launcherPattern = regexp.MustCompile(`^([ \t]*(?:uwsm[ \t]+app[ \t]+--[ \t]+)?)(/usr/bin/)?([a-zA-Z0-9_-]+)(.*)$`)
 
 type launcherResult struct {
-	Role, Replacement, Program string
-	Safe                       bool
+	Role        string
+	Replacement string
+	Program     string
+	Safe        bool
 }
 
 // launcherCommand accepts only understood direct launch forms. Shell wrappers,
@@ -127,13 +158,17 @@ func shellWords(text string) ([]string, error) {
 }
 
 type luaToken struct {
-	Kind, Value               string
-	Known                     bool
-	Start, End, Braces, Order int
-	Blocks                    []string
+	Kind, Value string
+	Known       bool
+	Start       int
+	End         int
+	Braces      int
+	Order       int
+	Blocks      []string
 }
 
 var luaName = regexp.MustCompile(`^[A-Za-z_][A-Za-z_0-9]*`)
+
 var luaLong = regexp.MustCompile(`^\[(=*)\[`)
 
 func tokenizeLua(text string) ([]luaToken, string, error) {
@@ -142,7 +177,15 @@ func tokenizeLua(text string) ([]luaToken, string, error) {
 	blocks := []string{}
 	braces := 0
 	newToken := func(kind, value string, known bool, start, end int) {
-		tokens = append(tokens, luaToken{Kind: kind, Value: value, Known: known, Start: start, End: end, Braces: braces, Blocks: append([]string{}, blocks...)})
+		tokens = append(tokens, luaToken{
+			Kind:   kind,
+			Value:  value,
+			Known:  known,
+			Start:  start,
+			End:    end,
+			Braces: braces,
+			Blocks: append([]string{}, blocks...),
+		})
 	}
 	for at := 0; at < len(text); {
 		start, ch := at, text[at]
@@ -263,21 +306,29 @@ func luaCallEnd(tokens []luaToken, opening int) (int, error) {
 }
 
 type launcherDocument struct {
-	Path, Text, Clean string
-	Tokens            []luaToken
-	Edits             []textEdit
+	Path   string
+	Text   string
+	Clean  string
+	Tokens []luaToken
+	Edits  []textEdit
 }
+
 type legacyEvent struct {
 	Doc    *launcherDocument
 	Offset int
 	Line   string
 }
+
 type launcherSite struct {
-	Doc               *launcherDocument
-	Name, Value, Role string
-	Known, Blocked    bool
-	Start, End, Order int
-	Uses              []bool
+	Doc            *launcherDocument
+	Name           string
+	Value          string
+	Role           string
+	Known, Blocked bool
+	Start          int
+	End            int
+	Order          int
+	Uses           []bool
 }
 
 type launcherEditor struct {
@@ -295,10 +346,10 @@ type launcherEditor struct {
 func launcherRole(name string) string {
 	parts := strings.Split(name, ".")
 	name = strings.ReplaceAll(strings.ToLower(parts[len(parts)-1]), "_", "")
-	if defaultContainsString([]string{"terminal", "terminalcmd", "terminalcommand"}, name) {
+	if contains([]string{"terminal", "terminalcmd", "terminalcommand"}, name) {
 		return "terminal"
 	}
-	if defaultContainsString([]string{"editor", "texteditor", "codeeditor", "editorcmd", "editorcommand"}, name) {
+	if contains([]string{"editor", "texteditor", "codeeditor", "editorcmd", "editorcommand"}, name) {
 		return "editor"
 	}
 	return ""
@@ -306,19 +357,21 @@ func launcherRole(name string) string {
 
 func (e *launcherEditor) caution(message string, graph bool) {
 	warnings := stringList(e.Details["warnings"])
-	if !defaultContainsString(warnings, message) {
+	if !contains(warnings, message) {
 		e.Details["warnings"] = append(warnings, message)
 	}
 	if graph {
 		e.SafeGraph = false
 	}
 }
+
 func (e *launcherEditor) old(program string) {
 	prior := stringList(e.Details["terminal_candidates"])
-	if program != "ghostty" && !defaultContainsString(prior, program) {
+	if program != "ghostty" && !contains(prior, program) {
 		e.Details["terminal_candidates"] = append(prior, program)
 	}
 }
+
 func (e *launcherEditor) allowed(path string) bool {
 	for _, root := range e.Allowed {
 		if inside(root, path) {
@@ -491,7 +544,7 @@ func (e *launcherEditor) load(path, kind string) error {
 					}
 				}
 			} else {
-				e.Legacy = append(e.Legacy, legacyEvent{doc, offset, clean})
+				e.Legacy = append(e.Legacy, legacyEvent{Doc: doc, Offset: offset, Line: clean})
 			}
 			offset += len(line)
 		}
@@ -501,10 +554,14 @@ func (e *launcherEditor) load(path, kind string) error {
 
 func (e *launcherEditor) edit(doc *launcherDocument, start, end int, value string) {
 	if doc.Text[start:end] != value {
-		doc.Edits = append(doc.Edits, textEdit{start, end, value})
+		doc.Edits = append(doc.Edits, textEdit{start: start, end: end, value: value})
 	}
 }
-func quoteLua(value string) string { data, _ := json.Marshal(value); return string(data) }
+
+func quoteLua(value string) string {
+	data, _ := json.Marshal(value)
+	return string(data)
+}
 
 var luaAssignment = regexp.MustCompile(`(?m)^[ \t]*(local[ \t]+)?([A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*)[ \t]*=[ \t]*`)
 
@@ -736,8 +793,11 @@ func (e *launcherEditor) lua() error {
 }
 
 var legacyAssignment = regexp.MustCompile(`^[ \t]*\$([A-Za-z_]\w*)[ \t]*=[ \t]*(.*?)[ \t]*$`)
+
 var legacyBind = regexp.MustCompile(`^[ \t]*(bind[a-z]*)[ \t]*=[ \t]*(.*)$`)
+
 var legacyVariable = regexp.MustCompile(`\$([A-Za-z_]\w*)`)
+
 var legacyUnsafe = regexp.MustCompile(`^[ \t]*(?:unbind[ \t]*=|submap[ \t]*=)`)
 
 func (e *launcherEditor) legacy() {
@@ -752,7 +812,15 @@ func (e *launcherEditor) legacy() {
 		}
 		if match := legacyAssignment.FindStringSubmatchIndex(event.Line); match != nil {
 			name, value := event.Line[match[2]:match[3]], event.Line[match[4]:match[5]]
-			site := &launcherSite{Doc: event.Doc, Name: name, Value: value, Known: true, Role: launcherRole(name), Start: event.Offset + match[4], End: event.Offset + match[5]}
+			site := &launcherSite{
+				Doc:   event.Doc,
+				Name:  name,
+				Value: value,
+				Known: true,
+				Role:  launcherRole(name),
+				Start: event.Offset + match[4],
+				End:   event.Offset + match[5],
+			}
 			values[name], sites[name] = value, site
 			assignments = append(assignments, site)
 			continue
@@ -767,7 +835,7 @@ func (e *launcherEditor) legacy() {
 			count = 4
 		}
 		parts := strings.SplitN(body, ",", count+1)
-		if len(parts) != count+1 || !defaultContainsString([]string{"exec", "execr"}, strings.TrimSpace(parts[len(parts)-2])) {
+		if len(parts) != count+1 || !contains([]string{"exec", "execr"}, strings.TrimSpace(parts[len(parts)-2])) {
 			continue
 		}
 		raw := parts[len(parts)-1]
@@ -854,7 +922,16 @@ func (e *launcherEditor) legacy() {
 // the entire graph when dynamic includes or scoped launcher mutations appear.
 // It never evaluates Lua or shell configuration.
 func EditHyprlandLaunchers(c *Context, path string, configureEditor bool) (map[string]any, error) {
-	details := map[string]any{"config_path": path, "format": "hyprlang", "loaded_paths": []string{}, "changed_paths": []string{}, "launcher_verified": false, "editor_verified": false, "terminal_candidates": []string{}, "warnings": []string{}}
+	details := map[string]any{
+		"config_path":         path,
+		"format":              "hyprlang",
+		"loaded_paths":        []string{},
+		"changed_paths":       []string{},
+		"launcher_verified":   false,
+		"editor_verified":     false,
+		"terminal_candidates": []string{},
+		"warnings":            []string{},
+	}
 	root, err := filepath.EvalSymlinks(filepath.Dir(path))
 	if err != nil {
 		return details, err
@@ -868,7 +945,15 @@ func EditHyprlandLaunchers(c *Context, path string, configureEditor bool) (map[s
 		kind = "lua"
 		details["format"] = kind
 	}
-	editor := &launcherEditor{Context: c, Details: details, ConfigureEditor: configureEditor, SafeGraph: true, Root: root, Allowed: []string{home, root}, Loaded: map[string]*launcherDocument{}}
+	editor := &launcherEditor{
+		Context:         c,
+		Details:         details,
+		ConfigureEditor: configureEditor,
+		SafeGraph:       true,
+		Root:            root,
+		Allowed:         []string{home, root},
+		Loaded:          map[string]*launcherDocument{},
+	}
 	if err = editor.load(path, kind); err != nil {
 		return details, err
 	}

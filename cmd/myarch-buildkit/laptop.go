@@ -14,8 +14,11 @@ import (
 )
 
 var inputNameCharacters = regexp.MustCompile(`[^a-z0-9_-]`)
+
 var internalOutputName = regexp.MustCompile(`^(?:eDP|LVDS|DSI)-[A-Za-z0-9_.:-]+$`)
+
 var safeInputName = regexp.MustCompile(`^[a-z0-9_-]+$`)
+
 var scaleValue = regexp.MustCompile(`^(?:[0-9]+(?:\.[0-9]+)?|[0-9]+/[0-9]+)$`)
 
 func ParseLaptopScale(value any) (float64, error) {
@@ -135,26 +138,18 @@ func KeyboardRoles(c *Context) (map[string][]string, error) {
 		if properties["ID_INPUT_KEYBOARD"] != "1" || (b != "0011" && b != "0018") || properties["ID_BUS"] == "usb" || properties["ID_BUS"] == "bluetooth" {
 			continue
 		}
-		if !desktopContainsString(roles["internal"], name) {
+		if !contains(roles["internal"], name) {
 			roles["internal"] = append(roles["internal"], name)
 		}
 	}
 	unmatched := []string{}
 	for _, name := range roles["unmatched"] {
-		if !desktopContainsString(roles["internal"], name) {
+		if !contains(roles["internal"], name) {
 			unmatched = append(unmatched, name)
 		}
 	}
 	roles["unmatched"] = unmatched
 	return roles, nil
-}
-func desktopContainsString(values []string, value string) bool {
-	for _, v := range values {
-		if v == value {
-			return true
-		}
-	}
-	return false
 }
 
 func PreflightLaptop(c *Context) error {
@@ -199,7 +194,12 @@ func PreflightLaptop(c *Context) error {
 		return fmt.Errorf("no built-in keyboard was verified by sysfs/udev; existing keyboard layouts were preserved")
 	}
 	c.Settings.Laptop.InternalScale = scale
-	c.Report["laptop_scale_selection"] = map[string]any{"scale": scale, "internal_outputs": outputs, "internal_keyboards": roles["internal"], "verified_modes": verified}
+	c.Report["laptop_scale_selection"] = map[string]any{
+		"scale":              scale,
+		"internal_outputs":   outputs,
+		"internal_keyboards": roles["internal"],
+		"verified_modes":     verified,
+	}
 	return nil
 }
 
@@ -210,6 +210,7 @@ func LaptopFragment(c *Context) string {
 	}
 	return filepath.Join(c.ConfigHome, "myarch-buildkit/laptop"+suffix)
 }
+
 func luaString(text string) string {
 	var b strings.Builder
 	b.WriteByte('"')
@@ -227,6 +228,7 @@ func luaString(text string) string {
 	b.WriteByte('"')
 	return b.String()
 }
+
 func LaptopConfigText(format string, selection map[string]any, layout string, natural bool) (string, error) {
 	value := strconv.FormatBool(natural)
 	scale := strconv.FormatFloat(mapJSONNumber(selection["scale"]), 'g', 17, 64)
@@ -256,6 +258,7 @@ func LaptopConfigText(format string, selection map[string]any, layout string, na
 	}
 	return strings.Join(lines, "\n") + "\n", nil
 }
+
 func ConfigureLaptop(c *Context) error {
 	if err := PreflightLaptop(c); err != nil {
 		return err
@@ -287,10 +290,22 @@ func ConfigureLaptop(c *Context) error {
 	if err = desktopWriteObject(c, filepath.Join(c.ConfigHome, "myarch-buildkit/laptop.json"), policy, 0600); err != nil {
 		return err
 	}
-	c.Report["laptop"] = map[string]any{"configured": true, "activated": false, "fragment": fragment, "internal_keyboards": selection["internal_keyboards"], "internal_outputs": selection["internal_outputs"], "requested": map[string]any{"internal_scale": selection["scale"], "internal_keyboard": layout, "natural_scroll": c.Settings.Laptop.NaturalScroll}}
+	c.Report["laptop"] = map[string]any{
+		"configured":         true,
+		"activated":          false,
+		"fragment":           fragment,
+		"internal_keyboards": selection["internal_keyboards"],
+		"internal_outputs":   selection["internal_outputs"],
+		"requested": map[string]any{
+			"internal_scale":    selection["scale"],
+			"internal_keyboard": layout,
+			"natural_scroll":    c.Settings.Laptop.NaturalScroll,
+		},
+	}
 	c.Note("Only natural scrolling, the verified built-in keyboard layout and built-in display scale are staged.")
 	return nil
 }
+
 func CheckLaptop(c *Context) error {
 	report := map[string]any{"scope": "read-only", "ready": false}
 	pending := []string{}

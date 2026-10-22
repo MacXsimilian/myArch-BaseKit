@@ -10,7 +10,7 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
 
 jobs:
   build:
@@ -22,72 +22,119 @@ jobs:
       GOOS: linux
       GOARCH: amd64
     steps:
-      - name: Check out source
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version: stable
-          # This standard-library-only project has no go.sum to cache.
+          # Standard-library-only module: there is no go.sum to cache.
           cache: false
-
-      - name: Build executable and checksum
+      - name: Build and package
+        shell: bash
         run: |
-          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
-            if [[ ! "$GITHUB_REF_NAME" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-              echo "::error::Release tags must use vMAJOR.MINOR.PATCH, for example v0.1.0"
-              exit 1
-            fi
-            make checksum VERSION="$GITHUB_REF_NAME"
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            bash scripts/validate-release.sh "$GITHUB_REF_NAME"
+            make package VERSION="$GITHUB_REF_NAME"
           else
-            make checksum
+            make package
           fi
-
-      - name: Smoke test executable
+      - name: Verify the packaged download
         run: |
-          ./bin/myarch-buildkit --version
-          ./bin/myarch-buildkit --help
-          ./bin/myarch-buildkit plan
-          cd bin
+          cd dist
           sha256sum -c SHA256SUMS
-
-      - name: Package download
-        run: |
-          mkdir -p dist
-          tar -czf dist/myarch-buildkit-linux-x86_64.tar.gz \
-            -C bin myarch-buildkit SHA256SUMS \
-            -C "$GITHUB_WORKSPACE" LICENSE docs/user-guide.md
-
-      - name: Upload executable bundle
-        uses: actions/upload-artifact@v6
+          mkdir unpacked
+          tar -xzf myarch-buildkit-linux-x86_64.tar.gz -C unpacked
+          cd unpacked
+          sha256sum -c SHA256SUMS
+          ./myarch-buildkit --version
+          ./myarch-buildkit --help
+          ./myarch-buildkit plan
+      - uses: actions/upload-artifact@v7
         with:
           name: myarch-buildkit-linux-x86_64
-          path: dist/myarch-buildkit-linux-x86_64.tar.gz
+          path: |
+            dist/myarch-buildkit-linux-x86_64.tar.gz
+            dist/SHA256SUMS
           if-no-files-found: error
           retention-days: 30
 
   test:
-    name: Test and vet
+    name: Test Go ${{ matrix.go }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      CGO_ENABLED: '1'
+    strategy:
+      fail-fast: false
+      matrix:
+        go: ['1.23.x', stable]
     steps:
-      - name: Check out source
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ matrix.go }}
+          cache: false
+      - name: Static analysis and tests
+        run: |
+          make vet
+          go test -race ./...
+      - name: Check formatting
+        if: matrix.go == 'stable'
+        run: make fmt-check
+      - name: Test privileged file operations in temporary directories
+        if: matrix.go == 'stable'
+        run: |
+          go test -c -o "$RUNNER_TEMP/privileged.test" ./cmd/myarch-buildkit
+          sudo "$RUNNER_TEMP/privileged.test" -test.v -test.run '^(TestPrivilegedWritesJournalOriginalAndRestoreExplicitly|TestPrivilegedRestoreProtectsLaterEdits|TestPrivilegedWriterRejectsSymlinkAndWritableAncestor|TestSystemRestoreNeverTrustsCallerBackupPath|TestLegacySystemRestoreKeepsRemovedSettingsRestoreOnly)$'
 
-      - name: Set up Go
-        uses: actions/setup-go@v6
+  lint:
+    name: Lint automation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v7
         with:
           go-version: stable
           cache: false
+      - name: Install linters
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes shellcheck
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+      - name: Check workflows and release scripts
+        run: |
+          actionlint -color
+          shellcheck scripts/*.sh
 
-      - name: Static analysis
-        run: make vet
-
-      # Keep failures visible without blocking the independent build job.
-      - name: Run tests
-        run: make test
+  release:
+    name: Publish release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [build, test, lint]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: myarch-buildkit-linux-x86_64
+          path: dist
+      - name: Publish verified assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          cd dist
+          sha256sum -c SHA256SUMS
+          gh release create "$RELEASE_TAG" \
+            myarch-buildkit-linux-x86_64.tar.gz SHA256SUMS \
+            --verify-tag --draft --title "$RELEASE_TAG" --generate-notes
+          gh release edit "$RELEASE_TAG" --draft=false

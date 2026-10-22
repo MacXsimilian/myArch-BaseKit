@@ -17,11 +17,31 @@ import (
 )
 
 const BuildkitFont = "JetBrainsMono Nerd Font Mono"
+
 const MarkdownDesktop = "myarch-buildkit-obsidian.desktop"
 
 var codeDesktopIDs = []string{"code.desktop", "visual-studio-code.desktop", "com.microsoft.VSCode.desktop"}
+
 var codeMIMEs = []string{
-	"text/plain", "text/x-python", "text/x-shellscript", "text/x-c", "text/x-c++", "text/x-csrc", "text/x-c++src", "text/x-chdr", "text/x-c++hdr", "text/x-go", "text/x-rust", "text/javascript", "application/javascript", "application/json", "application/yaml", "text/yaml", "application/toml", "text/x-makefile", "application/x-code-workspace",
+	"text/plain",
+	"text/x-python",
+	"text/x-shellscript",
+	"text/x-c",
+	"text/x-c++",
+	"text/x-csrc",
+	"text/x-c++src",
+	"text/x-chdr",
+	"text/x-c++hdr",
+	"text/x-go",
+	"text/x-rust",
+	"text/javascript",
+	"application/javascript",
+	"application/json",
+	"application/yaml",
+	"text/yaml",
+	"application/toml",
+	"text/x-makefile",
+	"application/x-code-workspace",
 }
 
 type desktopEntry struct {
@@ -112,7 +132,7 @@ func discoverDesktop(c *Context, id string) (*desktopEntry, error) {
 		if typ := props["Type"]; typ != "" && typ != "Application" {
 			return nil, fmt.Errorf("not an application desktop entry: %s", path)
 		}
-		return &desktopEntry{id, path, desktopIDs(props["MimeType"], "")}, nil
+		return &desktopEntry{ID: id, Path: path, MIMEs: desktopIDs(props["MimeType"], "")}, nil
 	}
 	return nil, fmt.Errorf("installed desktop entry was not found: %s", id)
 }
@@ -126,15 +146,6 @@ func discoverCode(c *Context) (*desktopEntry, error) {
 		}
 	}
 	return nil, fmt.Errorf("installed VS Code desktop entry was not found; checked %s", strings.Join(codeDesktopIDs, ", "))
-}
-
-func defaultContainsString(list []string, item string) bool {
-	for _, value := range list {
-		if value == item {
-			return true
-		}
-	}
-	return false
 }
 
 func managedBlock(text, begin, end, block string) (string, error) {
@@ -304,25 +315,31 @@ func selectedMIMEAssociations(entries map[string]*desktopEntry) (map[string]stri
 	for _, mime := range codeMIMEs {
 		intended[mime] = entries["code"].ID
 	}
-	if !defaultContainsString(entries["obsidian"].MIMEs, "x-scheme-handler/obsidian") {
+	if !contains(entries["obsidian"].MIMEs, "x-scheme-handler/obsidian") {
 		warnings = append(warnings, "obsidian.desktop does not advertise its URI scheme; URI default was not changed")
 	} else {
 		intended["x-scheme-handler/obsidian"] = entries["obsidian"].ID
 	}
-	if !defaultContainsString(entries["firefox"].MIMEs, "application/pdf") {
+	if !contains(entries["firefox"].MIMEs, "application/pdf") {
 		warnings = append(warnings, "firefox.desktop does not advertise application/pdf; PDF default was not changed")
 	} else {
 		intended["application/pdf"] = entries["firefox"].ID
 	}
 	vlc := entries["vlc"]
-	mediaReady := defaultContainsString(vlc.MIMEs, "audio/mpeg") && defaultContainsString(vlc.MIMEs, "video/mp4")
+	mediaReady := contains(vlc.MIMEs, "audio/mpeg") && contains(vlc.MIMEs, "video/mp4")
 	if !mediaReady {
 		warnings = append(warnings, "vlc.desktop does not advertise the required MP3/MP4 types; media defaults were not changed")
 	}
 	intended["text/markdown"], intended["text/x-markdown"] = MarkdownDesktop, MarkdownDesktop
 	intended["inode/directory"] = entries["nautilus"].ID
 	for _, mime := range vlc.MIMEs {
-		if mediaReady && (strings.HasPrefix(mime, "audio/") || strings.HasPrefix(mime, "video/") || defaultContainsString([]string{"application/ogg", "application/x-ogg", "application/xspf+xml", "application/vnd.apple.mpegurl", "application/x-mpegurl"}, mime)) {
+		if mediaReady && (strings.HasPrefix(mime, "audio/") || strings.HasPrefix(mime, "video/") || contains([]string{
+			"application/ogg",
+			"application/x-ogg",
+			"application/xspf+xml",
+			"application/vnd.apple.mpegurl",
+			"application/x-mpegurl",
+		}, mime)) {
 			intended[mime] = vlc.ID
 		}
 	}
@@ -371,6 +388,19 @@ func configureMIME(c *Context, intended map[string]string, codeID string) error 
 	return nil
 }
 
+func configureFastfetch(c *Context) (string, error) {
+	path := filepath.Join(c.ConfigHome, "fastfetch", "config.jsonc")
+	text, err := configRead(c, path)
+	if err != nil {
+		return "", err
+	}
+	updated, err := EditJSONC(text, map[string]any{"logo": jsonObjectPatch{"type": "builtin", "source": "arch"}})
+	if err != nil {
+		return "", err
+	}
+	return path, c.Write(path, []byte(updated), 0600)
+}
+
 // ConfigureDefaults preserves personal application settings and adds only the
 // requested defaults. All edits use the context's backup/staging writer.
 func ConfigureDefaults(c *Context) error {
@@ -384,8 +414,17 @@ func ConfigureDefaults(c *Context) error {
 	entries := map[string]*desktopEntry{}
 	discoveries := map[string]any{}
 	incomplete := []string{}
-	report := map[string]any{"schema_version": 1, "font": BuildkitFont, "status": "complete", "configured": configured, "desktop_entries": discoveries,
-		"manual_checks": []string{"Test the existing terminal/editor shortcuts after the staged desktop profile is applied at login.", "Open an existing notes vault in Obsidian once. Markdown associations require the file to belong to a vault already registered in Obsidian."}}
+	report := map[string]any{
+		"schema_version":  1,
+		"font":            BuildkitFont,
+		"status":          "complete",
+		"configured":      configured,
+		"desktop_entries": discoveries,
+		"manual_checks": []string{
+			"Test the existing terminal/editor shortcuts after the staged desktop profile is applied at login.",
+			"Open an existing notes vault in Obsidian once. Markdown associations require the file to belong to a vault already registered in Obsidian.",
+		},
+	}
 	c.Report["defaults"] = report
 	action := func(name string, fn func() error) {
 		if err := fn(); err != nil {
@@ -394,7 +433,13 @@ func ConfigureDefaults(c *Context) error {
 			c.Warn(message)
 		}
 	}
-	for _, app := range [][2]string{{"ghostty", "com.mitchellh.ghostty.desktop"}, {"obsidian", "obsidian.desktop"}, {"firefox", "firefox.desktop"}, {"vlc", "vlc.desktop"}, {"nautilus", "org.gnome.Nautilus.desktop"}} {
+	for _, app := range [][2]string{
+		{"ghostty", "com.mitchellh.ghostty.desktop"},
+		{"obsidian", "obsidian.desktop"},
+		{"firefox", "firefox.desktop"},
+		{"vlc", "vlc.desktop"},
+		{"nautilus", "org.gnome.Nautilus.desktop"},
+	} {
 		app := app
 		action("Discover "+app[0], func() error {
 			entry, err := discoverDesktop(c, app[1])
@@ -424,6 +469,13 @@ func ConfigureDefaults(c *Context) error {
 			}
 		}
 		report["old_markdown_desktop"] = oldMarkdown
+		action("Fastfetch logo", func() error {
+			path, err := configureFastfetch(c)
+			if err == nil {
+				configured["fastfetch_logo"] = map[string]any{"path": path, "source": "arch"}
+			}
+			return err
+		})
 		action("Ghostty font", func() error {
 			path, err := configureGhostty(c)
 			if err == nil {
@@ -448,7 +500,10 @@ func ConfigureDefaults(c *Context) error {
 			return err
 		})
 		configured["hyprland_launchers"] = "Managed by the separately staged desktop profile"
-		fonts := map[string]any{"editor.fontFamily": "'" + BuildkitFont + "', monospace", "terminal.integrated.fontFamily": "'" + BuildkitFont + "', monospace"}
+		fonts := map[string]any{
+			"editor.fontFamily":              "'" + BuildkitFont + "', monospace",
+			"terminal.integrated.fontFamily": "'" + BuildkitFont + "', monospace",
+		}
 		report["vscode_font_settings"] = fonts
 		action("VS Code fonts", func() error {
 			path := filepath.Join(c.ConfigHome, "Code/User/settings.json")
@@ -516,18 +571,30 @@ func ConfigureDefaults(c *Context) error {
 func CheckDefaults(c *Context) error {
 	checks := map[string]string{}
 	failures := []string{}
-	terminal, err := c.Command(Command{Args: []string{"xdg-terminal-exec", "--print-id"}, Env: map[string]string{"XDG_CURRENT_DESKTOP": "Hyprland"}, Timeout: 15 * time.Second})
+	terminal, err := c.Command(Command{
+		Args:    []string{"xdg-terminal-exec", "--print-id"},
+		Env:     map[string]string{"XDG_CURRENT_DESKTOP": "Hyprland"},
+		Timeout: 15 * time.Second,
+	})
 	checks["terminal"] = strings.TrimSpace(terminal.Stdout)
 	if err != nil || checks["terminal"] != "com.mitchellh.ghostty.desktop" {
 		failures = append(failures, "Ghostty terminal default")
 	}
-	for _, item := range [][2]string{{"text/plain", ""}, {"x-scheme-handler/obsidian", "obsidian.desktop"}, {"text/markdown", MarkdownDesktop}, {"inode/directory", "org.gnome.Nautilus.desktop"}, {"application/pdf", "firefox.desktop"}, {"audio/mpeg", "vlc.desktop"}, {"video/mp4", "vlc.desktop"}} {
+	for _, item := range [][2]string{
+		{"text/plain", ""},
+		{"x-scheme-handler/obsidian", "obsidian.desktop"},
+		{"text/markdown", MarkdownDesktop},
+		{"inode/directory", "org.gnome.Nautilus.desktop"},
+		{"application/pdf", "firefox.desktop"},
+		{"audio/mpeg", "vlc.desktop"},
+		{"video/mp4", "vlc.desktop"},
+	} {
 		result := c.Try("xdg-mime", "query", "default", item[0])
 		actual := strings.TrimSpace(result.Stdout)
 		checks[item[0]] = actual
 		good := result.Code == 0 && actual == item[1]
 		if item[0] == "text/plain" {
-			good = result.Code == 0 && defaultContainsString(codeDesktopIDs, actual)
+			good = result.Code == 0 && contains(codeDesktopIDs, actual)
 		}
 		if !good {
 			failures = append(failures, item[0]+" default")
@@ -702,7 +769,10 @@ func InspectSession(c *Context) error {
 	for _, item := range []struct {
 		key  string
 		args []string
-	}{{"monitors", []string{"hyprctl", "-j", "monitors", "all"}}, {"devices", []string{"hyprctl", "-j", "devices"}}} {
+	}{
+		{"monitors", []string{"hyprctl", "-j", "monitors", "all"}},
+		{"devices", []string{"hyprctl", "-j", "devices"}},
+	} {
 		result, err := c.Run(item.args...)
 		if err != nil {
 			return err

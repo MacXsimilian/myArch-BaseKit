@@ -16,7 +16,13 @@ func unifiedReportFixture(t *testing.T, c *Context, scopes ...string) string {
 	for _, scope := range scopes {
 		stages[scope] = map[string]any{"status": "completed", "artifacts": filepath.Join(stateRoot(c), "runs", filepath.Base(root), scope)}
 	}
-	if err := WriteJSON(path, map[string]any{"format": RunReportFormat, "schema_version": RunReportSchemaVersion, "settings": DefaultSettings(), "stages": stages, "profiles": map[string]any{}}); err != nil {
+	if err := WriteJSON(path, map[string]any{
+		"format":         RunReportFormat,
+		"schema_version": RunReportSchemaVersion,
+		"settings":       DefaultSettings(),
+		"stages":         stages,
+		"profiles":       map[string]any{},
+	}); err != nil {
 		t.Fatal(err)
 	}
 	return path
@@ -25,7 +31,11 @@ func unifiedReportFixture(t *testing.T, c *Context, scopes ...string) string {
 func TestUnifiedReportInterleavedWritesKeepSummaryAndEveryProfile(t *testing.T) {
 	c, _ := storageContext(t)
 	path := unifiedReportFixture(t, c, "laptop", "desktop")
-	summary := map[string]any{"status": "running", "stages": map[string]any{"laptop": map[string]any{"status": "pending_login"}}, "profiles": map[string]any{}}
+	summary := map[string]any{
+		"status":   "running",
+		"stages":   map[string]any{"laptop": map[string]any{"status": "pending_login"}},
+		"profiles": map[string]any{},
+	}
 	if err := WriteProfileReport(path, "laptop", map[string]any{"schema_version": 1, "status": "pending_login", "note": "original laptop"}); err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +102,11 @@ func TestUnifiedReportLoginUpdatesPendingSummaryAfterEveryStageFinishes(t *testi
 	path := unifiedReportFixture(t, c, "laptop", "desktop")
 	stages := map[string]any{}
 	for _, scope := range []string{"laptop", "desktop"} {
-		stages[scope] = map[string]any{"status": "pending_login", "artifacts": filepath.Join(stateRoot(c), "runs", filepath.Base(c.RunDir), scope), "retry": "saved retry"}
+		stages[scope] = map[string]any{
+			"status":    "pending_login",
+			"artifacts": filepath.Join(stateRoot(c), "runs", filepath.Base(c.RunDir), scope),
+			"retry":     "saved retry",
+		}
 		if err := WriteProfileReport(path, scope, map[string]any{"schema_version": 1, "status": "pending_login", "pending_configuration": map[string]any{"status": "pending"}}); err != nil {
 			t.Fatal(err)
 		}
@@ -101,7 +115,11 @@ func TestUnifiedReportLoginUpdatesPendingSummaryAfterEveryStageFinishes(t *testi
 		t.Fatal(err)
 	}
 	for _, scope := range []string{"laptop", "desktop"} {
-		if err := WriteProfileReport(path, scope, map[string]any{"schema_version": 1, "status": "applied_before_login", "pending_configuration": map[string]any{"status": "applied"}}); err != nil {
+		if err := WriteProfileReport(path, scope, map[string]any{
+			"schema_version":        1,
+			"status":                "applied_before_login",
+			"pending_configuration": map[string]any{"status": "applied"},
+		}); err != nil {
 			t.Fatal(err)
 		}
 		document := map[string]any{}
@@ -127,7 +145,12 @@ func TestUnifiedReportTerminalUpdatesPreserveFailureHistory(t *testing.T) {
 		t.Run(overall, func(t *testing.T) {
 			c, _ := storageContext(t)
 			path := unifiedReportFixture(t, c, "desktop")
-			if err := WriteRunSummary(path, map[string]any{"status": overall, "error": "original setup error", "stages": map[string]any{"desktop": map[string]any{"status": "running", "error": "original stage error"}}, "pending_configuration": map[string]any{"status": "pending"}}); err != nil {
+			if err := WriteRunSummary(path, map[string]any{
+				"status":                overall,
+				"error":                 "original setup error",
+				"stages":                map[string]any{"desktop": map[string]any{"status": "running", "error": "original stage error"}},
+				"pending_configuration": map[string]any{"status": "pending"},
+			}); err != nil {
 				t.Fatal(err)
 			}
 			if err := WriteProfileReport(path, "desktop", map[string]any{"schema_version": 1, "status": "pending"}); err != nil {
@@ -157,10 +180,19 @@ func TestUnifiedReportTerminalUpdatesPreserveFailureHistory(t *testing.T) {
 func TestUnifiedReportPartialRestoreClearsPendingAndKeepsManualFollowup(t *testing.T) {
 	c, _ := storageContext(t)
 	path := unifiedReportFixture(t, c, "desktop")
-	if err := WriteRunSummary(path, map[string]any{"status": "pending_login", "stages": map[string]any{"desktop": map[string]any{"status": "pending_login"}}, "pending_configuration": map[string]any{"status": "pending"}}); err != nil {
+	if err := WriteRunSummary(path, map[string]any{
+		"status":                "pending_login",
+		"stages":                map[string]any{"desktop": map[string]any{"status": "pending_login"}},
+		"pending_configuration": map[string]any{"status": "pending"},
+	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := WriteProfileReport(path, "desktop", map[string]any{"schema_version": 1, "status": "restore_partial", "pending_configuration": map[string]any{"status": "cancelled"}, "warnings": []string{"file changed; restore manually"}}); err != nil {
+	if err := WriteProfileReport(path, "desktop", map[string]any{
+		"schema_version":        1,
+		"status":                "restore_partial",
+		"pending_configuration": map[string]any{"status": "cancelled"},
+		"warnings":              []string{"file changed; restore manually"},
+	}); err != nil {
 		t.Fatal(err)
 	}
 	document := map[string]any{}
@@ -177,7 +209,13 @@ func TestUnifiedReportPartialRestoreClearsPendingAndKeepsManualFollowup(t *testi
 }
 
 func TestUnifiedReportRefusesMissingCorruptAndUnsupportedDocuments(t *testing.T) {
-	for _, content := range []string{"", "not JSON", `{}`, `{"format":"myarch-buildkit-run","schema_version":2,"profiles":{}}`, `{"format":"myarch-buildkit-run","schema_version":3,"profiles":null}`} {
+	for _, content := range []string{
+		"",
+		"not JSON",
+		`{}`,
+		`{"format":"myarch-buildkit-run","schema_version":2,"profiles":{}}`,
+		`{"format":"myarch-buildkit-run","schema_version":3,"profiles":null}`,
+	} {
 		t.Run(content, func(t *testing.T) {
 			c, _ := storageContext(t)
 			path := filepath.Join(c.RunDir, "report.json")

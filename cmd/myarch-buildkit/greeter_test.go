@@ -25,6 +25,7 @@ func TestGreeterUsesPasswordLoginAndDocumentedCompositor(t *testing.T) {
 		t.Fatal("unverified compositor accepted")
 	}
 }
+
 func TestGreeterKeyboardRulesOnlyVerifiedInternalNames(t *testing.T) {
 	roles := map[string][]string{"internal": {"at-translated-set-2-keyboard", "missing"}, "external": {"usb-keyboard"}}
 	observed := map[string]bool{"at-translated-set-2-keyboard": true, "usb-keyboard": true}
@@ -44,6 +45,7 @@ func TestGreeterKeyboardRulesOnlyVerifiedInternalNames(t *testing.T) {
 		t.Fatal("unsafe hyprlang device accepted")
 	}
 }
+
 func TestGreetdExecutableVerification(t *testing.T) {
 	for _, text := range []string{"{ path=/usr/bin/greetd ; argv[]=/usr/bin/greetd ; }", "{ path=greetd ; argv[]=greetd ; }"} {
 		if !GreetdExecMatches(text) {
@@ -56,13 +58,26 @@ func TestGreetdExecutableVerification(t *testing.T) {
 		}
 	}
 }
+
 func TestSystemAllowlistRemovesPowerAndThemePaths(t *testing.T) {
-	for _, path := range []string{"/etc/greetd/config.toml", "/etc/greetd/hypr.lua", systemBinary, "/usr/share/wayland-sessions/myarch-buildkit.desktop"} {
+	for _, path := range []string{
+		"/etc/greetd/config.toml",
+		"/etc/greetd/hypr.lua",
+		systemBinary,
+		"/usr/share/wayland-sessions/myarch-buildkit.desktop",
+	} {
 		if !systemAllowed(path) {
 			t.Errorf("supported path rejected: %s", path)
 		}
 	}
-	for _, path := range []string{"/etc/passwd", "/etc/pam.d/greetd", "/etc/systemd/logind.conf.d/cachyos.conf", "/var/cache/dms-greeter/settings.json", "/tmp/myarch-buildkit", "/etc/greetd/../passwd"} {
+	for _, path := range []string{
+		"/etc/passwd",
+		"/etc/pam.d/greetd",
+		"/etc/systemd/logind.conf.d/cachyos.conf",
+		"/var/cache/dms-greeter/settings.json",
+		"/tmp/myarch-buildkit",
+		"/etc/greetd/../passwd",
+	} {
 		if systemAllowed(path) {
 			t.Errorf("unrelated path accepted: %s", path)
 		}
@@ -73,6 +88,7 @@ func TestSystemAllowlistRemovesPowerAndThemePaths(t *testing.T) {
 		}
 	}
 }
+
 func requireRootFS(t *testing.T) string {
 	t.Helper()
 	if os.Getuid() != 0 {
@@ -80,6 +96,7 @@ func requireRootFS(t *testing.T) string {
 	}
 	return t.TempDir()
 }
+
 func TestPrivilegedWritesJournalOriginalAndRestoreExplicitly(t *testing.T) {
 	root := requireRootFS(t)
 	path := "/etc/greetd/config.toml"
@@ -118,6 +135,7 @@ func TestPrivilegedWritesJournalOriginalAndRestoreExplicitly(t *testing.T) {
 		t.Fatalf("original mode lost: %o", info.Mode().Perm())
 	}
 }
+
 func TestPrivilegedRestoreProtectsLaterEdits(t *testing.T) {
 	root := requireRootFS(t)
 	p := systemPayload{Path: "/etc/greetd/config.toml", Data: []byte("managed"), Mode: 0644, RunID: "run-2"}
@@ -136,6 +154,7 @@ func TestPrivilegedRestoreProtectsLaterEdits(t *testing.T) {
 		t.Fatal("later edits not preserved")
 	}
 }
+
 func TestPrivilegedWriterRejectsSymlinkAndWritableAncestor(t *testing.T) {
 	root := requireRootFS(t)
 	path := rooted(root, "/etc/greetd")
@@ -166,6 +185,7 @@ func TestPrivilegedWriterRejectsSymlinkAndWritableAncestor(t *testing.T) {
 		t.Fatal("unsafe mode accepted")
 	}
 }
+
 func TestSystemRestoreNeverTrustsCallerBackupPath(t *testing.T) {
 	root := requireRootFS(t)
 	p := systemPayload{Path: "/etc/greetd/config.toml", Data: []byte("managed"), Mode: 0644, RunID: "run-4"}
@@ -203,8 +223,13 @@ func TestRootStatRejectsWritableLinkedAndUnownedPaths(t *testing.T) {
 		}
 	}
 }
+
 func TestLegacySystemRestoreKeepsRemovedSettingsRestoreOnly(t *testing.T) {
-	for _, path := range []string{"/usr/local/lib/myarch-buildkit/login.py", "/etc/systemd/logind.conf.d/60-myarch-buildkit-lid.conf", "/var/cache/dms-greeter/settings.json"} {
+	for _, path := range []string{
+		"/usr/local/lib/myarch-buildkit/login.py",
+		"/etc/systemd/logind.conf.d/60-myarch-buildkit-lid.conf",
+		"/var/cache/dms-greeter/settings.json",
+	} {
 		if !legacySystemAllowed(path) || systemAllowed(path) {
 			t.Errorf("legacy path should be restore-only: %s", path)
 		}
@@ -230,7 +255,12 @@ func TestLegacySystemRestoreKeepsRemovedSettingsRestoreOnly(t *testing.T) {
 	if err := os.WriteFile(actualBackup, []byte("old policy"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	record := map[string]any{"path": destination, "backup": backup, "sha256": systemDigest([]byte("managed")), "previous": map[string]any{"mode": float64(0644), "uid": float64(0), "gid": float64(0)}}
+	record := map[string]any{
+		"path":     destination,
+		"backup":   backup,
+		"sha256":   systemDigest([]byte("managed")),
+		"previous": map[string]any{"mode": float64(0644), "uid": float64(0), "gid": float64(0)},
+	}
 	p := systemPayload{LegacyRecord: record, LegacyRunDir: run}
 	if err := privilegedLegacyRestore(root, int(os.Getuid()), p); err != nil {
 		t.Fatal(err)

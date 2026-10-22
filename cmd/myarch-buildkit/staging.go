@@ -11,9 +11,23 @@ import (
 	"syscall"
 )
 
-var disableUnits = []string{"dms.service", "cachyos-dms-direct.service", "noctalia.service", "noctalia-shell.service", "waybar.service", "mako.service", "dunst.service", "swaync.service", "hyprpolkitagent.service", "nm-applet.service", "cachyos-laptop-session.service", "cachyos-laptop-idle.service"}
+var disableUnits = []string{
+	"dms.service",
+	"cachyos-dms-direct.service",
+	"noctalia.service",
+	"noctalia-shell.service",
+	"waybar.service",
+	"mako.service",
+	"dunst.service",
+	"swaync.service",
+	"hyprpolkitagent.service",
+	"nm-applet.service",
+	"cachyos-laptop-session.service",
+	"cachyos-laptop-idle.service",
+}
 
 type StageFile struct {
+	Delete          bool           `json:"delete,omitempty"`
 	Path            string         `json:"path"`
 	Source          string         `json:"source"`
 	Mode            uint32         `json:"mode"`
@@ -22,6 +36,7 @@ type StageFile struct {
 	OwnershipMarker string         `json:"ownership_marker,omitempty"`
 	JSONUpdates     map[string]any `json:"json_updates"`
 }
+
 type Manifest struct {
 	Version     int            `json:"version"`
 	Status      string         `json:"status"`
@@ -31,12 +46,14 @@ type Manifest struct {
 	Files       []StageFile    `json:"files"`
 	Validation  map[string]any `json:"validation"`
 }
+
 type QueueItem struct {
 	Manifest    string `json:"manifest"`
 	Phase       string `json:"phase"`
 	Report      string `json:"report,omitempty"`
 	ReportScope string `json:"report_scope,omitempty"`
 }
+
 type pendingQueue struct {
 	Version int         `json:"version"`
 	Items   []QueueItem `json:"items"`
@@ -45,22 +62,31 @@ type pendingQueue struct {
 // A missing bundle is still queued configuration. Checking it must not silently
 // discard the entry or imply that the current desktop is configured correctly.
 type PendingConfigurationError struct {
-	Phase, Manifest, Report, Reason, RecoveryCommand string
-	RecoveryCommands                                 []string
-	Cause                                            error
+	Phase            string
+	Manifest         string
+	Report           string
+	Reason           string
+	RecoveryCommand  string
+	RecoveryCommands []string
+	Cause            error
 }
 
 func (e *PendingConfigurationError) Error() string {
 	return fmt.Sprintf("pending %s manifest is missing: %s; the next-login queue still references this unavailable run", e.Phase, e.Manifest)
 }
+
 func (e *PendingConfigurationError) Unwrap() error { return e.Cause }
 
-func stateRoot(c *Context) string    { return filepath.Join(c.StateHome, "myarch-buildkit") }
-func queuePath(c *Context) string    { return filepath.Join(stateRoot(c), "pending-login.json") }
+func stateRoot(c *Context) string { return filepath.Join(c.StateHome, "myarch-buildkit") }
+
+func queuePath(c *Context) string { return filepath.Join(stateRoot(c), "pending-login.json") }
+
 func manifestPath(c *Context) string { return filepath.Join(c.RunDir, "pending-profile.json") }
+
 func payloadPath(manifest, destination string) string {
 	return filepath.Join(filepath.Dir(manifest), "pending-files", pathID(destination), filepath.Base(destination))
 }
+
 func validateQueueItem(c *Context, item QueueItem) error {
 	if !contains([]string{"laptop", "desktop"}, item.Phase) || !filepath.IsAbs(item.Manifest) || filepath.Clean(item.Manifest) != item.Manifest || !inside(c.Home, item.Manifest) || filepath.Base(item.Manifest) != "pending-profile.json" {
 		return fmt.Errorf("unsupported pending login entry: %s", item.Manifest)
@@ -76,12 +102,14 @@ func validateQueueItem(c *Context, item QueueItem) error {
 	}
 	return nil
 }
+
 func pendingReportReference(item QueueItem) (string, string, string) {
 	if item.ReportScope != "" {
 		return item.Report, item.ReportScope, filepath.Dir(item.Report)
 	}
 	return filepath.Join(filepath.Dir(item.Manifest), "profile-report.json"), "", filepath.Dir(item.Manifest)
 }
+
 func pendingRecoveryCommand(c *Context, item QueueItem) string {
 	binary, err := currentExecutable()
 	if err != nil || binary == "" {
@@ -100,9 +128,16 @@ func pendingRecoveryCommand(c *Context, item QueueItem) string {
 	}
 	return planShellWords([]string{binary, "--restore-stage", item.Phase, "--stage-run-dir", restoreDir})
 }
+
 func missingPendingError(c *Context, item QueueItem, cause error) *PendingConfigurationError {
 	reportPath, _, _ := pendingReportReference(item)
-	e := &PendingConfigurationError{Phase: item.Phase, Manifest: item.Manifest, Report: reportPath, Reason: "The saved next-login queue still references this missing manifest.", Cause: cause}
+	e := &PendingConfigurationError{
+		Phase:    item.Phase,
+		Manifest: item.Manifest,
+		Report:   reportPath,
+		Reason:   "The saved next-login queue still references this missing manifest.",
+		Cause:    cause,
+	}
 	// Desktop validation can include the laptop payload. Remove that dependency
 	// explicitly before dropping the laptop queue entry.
 	if item.Phase == "laptop" {
@@ -118,6 +153,7 @@ func missingPendingError(c *Context, item QueueItem, cause error) *PendingConfig
 	e.RecoveryCommand = e.RecoveryCommands[0]
 	return e
 }
+
 func readPendingManifest(c *Context, item QueueItem) (Manifest, error) {
 	manifest := Manifest{}
 	if err := validateQueueItem(c, item); err != nil {
@@ -131,6 +167,7 @@ func readPendingManifest(c *Context, item QueueItem) (Manifest, error) {
 	}
 	return manifest, nil
 }
+
 func PendingItems(c *Context) ([]QueueItem, error) {
 	queue := pendingQueue{Version: 1, Items: []QueueItem{}}
 	if err := securePath(queuePath(c), true); err != nil {
@@ -146,12 +183,14 @@ func PendingItems(c *Context) ([]QueueItem, error) {
 	}
 	return queue.Items, nil
 }
+
 func writeQueue(c *Context, items []QueueItem) error {
 	if items == nil {
 		items = []QueueItem{}
 	}
 	return WriteJSON(queuePath(c), pendingQueue{Version: 1, Items: items})
 }
+
 func (c *Context) StartStaging() error {
 	if c.CheckOnly {
 		return fmt.Errorf("a check cannot stage configuration")
@@ -160,12 +199,19 @@ func (c *Context) StartStaging() error {
 	if c.ReportScope != "" {
 		version = 2
 	}
-	manifest := Manifest{Version: version, Status: "building", Report: c.ReportPath, ReportScope: c.ReportScope, Files: []StageFile{}, Validation: map[string]any{}}
+	manifest := Manifest{
+		Version:     version,
+		Status:      "building",
+		Report:      c.ReportPath,
+		ReportScope: c.ReportScope,
+		Files:       []StageFile{},
+		Validation:  map[string]any{},
+	}
 	if exists(manifestPath(c)) {
 		if err := ReadJSON(manifestPath(c), &manifest); err != nil {
 			return err
 		}
-		if manifest.Version != version || manifest.Status != "building" && manifest.Status != "pending" {
+		if (manifest.Version != version && manifest.Version != 3) || manifest.Status != "building" && manifest.Status != "pending" {
 			return fmt.Errorf("this stage was already applied; create a fresh run")
 		}
 		if manifest.Report != c.ReportPath || manifest.ReportScope != c.ReportScope {
@@ -175,6 +221,7 @@ func (c *Context) StartStaging() error {
 	c.Pending = &manifest
 	return nil
 }
+
 func (c *Context) View(path string) string {
 	if c.Pending != nil {
 		for _, record := range c.Pending.Files {
@@ -200,6 +247,7 @@ func (c *Context) View(path string) string {
 	}
 	return path
 }
+
 func (c *Context) stageWrite(path string, data []byte, mode os.FileMode) error {
 	if !inside(c.Home, path) {
 		return fmt.Errorf("pending destination must be within the user home: %s", path)
@@ -214,7 +262,14 @@ func (c *Context) stageWrite(path string, data []byte, mode os.FileMode) error {
 	if err != nil {
 		return err
 	}
-	record := StageFile{Path: path, Source: payloadPath(manifestPath(c), path), Mode: uint32(mode.Perm()), SHA256: hashBytes(data), BeforeSHA256: before, OwnershipMarker: c.ownershipPath(path)}
+	record := StageFile{
+		Path:            path,
+		Source:          payloadPath(manifestPath(c), path),
+		Mode:            uint32(mode.Perm()),
+		SHA256:          hashBytes(data),
+		BeforeSHA256:    before,
+		OwnershipMarker: c.ownershipPath(path),
+	}
 	index := -1
 	for i, old := range c.Pending.Files {
 		if old.Path == path {
@@ -254,17 +309,40 @@ func (c *Context) stageWrite(path string, data []byte, mode os.FileMode) error {
 	}
 	return WriteJSON(manifestPath(c), c.Pending)
 }
+
+// Version 3 adds explicit deletion records. Older executables refuse this
+// manifest rather than interpreting a deletion as an empty replacement file.
+func (c *Context) stageDelete(path string) error {
+	if c.CheckOnly || c.Pending == nil {
+		return fmt.Errorf("plugin removal requires staging")
+	}
+	if err := c.Err(); err != nil {
+		return err
+	}
+	if err := c.stageWrite(path, nil, 0600); err != nil {
+		return err
+	}
+	for i := range c.Pending.Files {
+		if c.Pending.Files[i].Path == path {
+			c.Pending.Files[i].Delete = true
+			c.Pending.Files[i].JSONUpdates = nil
+		}
+	}
+	c.Pending.Version = 3
+	return WriteJSON(manifestPath(c), c.Pending)
+}
+
 func isDMSJSON(path string) bool {
 	if !contains([]string{"settings.json", "session.json", "clsettings.json", "plugin_settings.json"}, filepath.Base(path)) {
 		return false
 	}
-	for _, part := range strings.Split(filepath.Clean(path), string(os.PathSeparator)) {
-		if part == "DankMaterialShell" {
-			return true
-		}
-	}
-	return false
+	// Only runtime files directly in the shell's config/state directory merge.
+	// A plugin may itself ship a settings.json; that file is source code/data and
+	// must be replaced exactly like the rest of its upstream snapshot.
+	parent := filepath.Base(filepath.Dir(path))
+	return parent == "DankMaterialShell" || parent == "dms"
 }
+
 func (c *Context) OverrideJSON(path string, updates map[string]any) error {
 	if c.Pending == nil {
 		return fmt.Errorf("JSON overrides require staging")
@@ -284,6 +362,7 @@ func (c *Context) OverrideJSON(path string, updates map[string]any) error {
 	}
 	return fmt.Errorf("no staged JSON file: %s", path)
 }
+
 func (c *Context) Publish(phase string) error {
 	if err := c.Err(); err != nil {
 		return err
@@ -338,11 +417,17 @@ func (c *Context) Publish(phase string) error {
 		phases = append(phases, phase)
 	}
 	c.Report["completed_phases"] = phases
-	c.Report["pending_configuration"] = map[string]any{"status": "pending", "manifest": manifestPath(c), "activation": "Log out and select myarch-buildkit at the next login", "validation": c.Pending.Validation}
+	c.Report["pending_configuration"] = map[string]any{
+		"status":     "pending",
+		"manifest":   manifestPath(c),
+		"activation": "Log out and select myarch-buildkit at the next login",
+		"validation": c.Pending.Validation,
+	}
 	c.Report["running_desktop"] = map[string]any{"changed_by_this_stage": false, "readiness": "not asserted"}
 	c.Report["status"] = "pending_login"
 	return c.Save()
 }
+
 func hyprlandBinary(c *Context) (string, error) {
 	if binary, ok := c.Inventory["hyprland_binary"].(string); ok && binary != "" {
 		return binary, nil
@@ -356,6 +441,7 @@ func hyprlandBinary(c *Context) (string, error) {
 }
 
 var configError = regexp.MustCompile(`(?i)config error|parse error`)
+
 var extraDMS = regexp.MustCompile(`\bdms\s+run\b|cachyos-desktop-session|cachyos-dms-guard`)
 
 func ValidateDesktop(c *Context) error {
@@ -453,9 +539,25 @@ func ValidateDesktop(c *Context) error {
 	if err != nil {
 		return err
 	}
-	c.Pending.Validation = map[string]any{"native_config_verified": true, "binary": binary, "candidate": candidate, "main_config": main, "managed_config": managed, "custom_config": custom, "candidate_dependencies": dependencies, "candidate_sha256": candidateHash, "custom_sha256": customHash, "custom_source": customSource, "startup_method": "Hyprland start hook -> dms run", "dms_schema_verified": true}
+	c.Pending.Validation = map[string]any{
+		"native_config_verified": true,
+		"binary":                 binary,
+		"candidate":              candidate,
+		"main_config":            main,
+		"managed_config":         managed,
+		"custom_config":          custom,
+		"candidate_dependencies": dependencies,
+		"candidate_sha256":       candidateHash,
+		"custom_sha256":          customHash,
+		"custom_source":          customSource,
+		"startup_method":         "Hyprland start hook -> dms run",
+		"dms_schema_verified":    true,
+		"dms_version":            c.Inventory["dms_version"],
+		"dms_version_output":     c.Inventory["dms_version_output"],
+	}
 	return WriteJSON(manifestPath(c), c.Pending)
 }
+
 func mergeJSON(target, updates map[string]any) {
 	for key, value := range updates {
 		incoming, ok := value.(map[string]any)
@@ -467,6 +569,7 @@ func mergeJSON(target, updates map[string]any) {
 		}
 	}
 }
+
 func plannedBytes(record StageFile) ([]byte, error) {
 	if err := securePath(record.Path, true); err != nil {
 		return nil, err
@@ -506,6 +609,7 @@ type filePlan struct {
 	Record StageFile
 	Data   []byte
 }
+
 type loginPlan struct {
 	Path     string
 	Manifest Manifest
@@ -525,17 +629,20 @@ func validatePlans(c *Context, items []QueueItem) ([]loginPlan, error) {
 		if err != nil {
 			return nil, err
 		}
-		if (manifest.Version != 1 && manifest.Version != 2) || manifest.Status != "pending" || manifest.Phase != item.Phase {
+		if (manifest.Version != 1 && manifest.Version != 2 && manifest.Version != 3) || manifest.Status != "pending" || manifest.Phase != item.Phase {
 			return nil, fmt.Errorf("pending bundle is not ready: %s", item.Manifest)
 		}
-		if manifest.Version == 1 && (manifest.Report != filepath.Join(filepath.Dir(item.Manifest), "profile-report.json") || manifest.ReportScope != "" || item.Report != "" || item.ReportScope != "") {
+		if (manifest.Version == 1 || (manifest.Version == 3 && manifest.ReportScope == "")) && (manifest.Report != filepath.Join(filepath.Dir(item.Manifest), "profile-report.json") || manifest.ReportScope != "" || item.Report != "" || item.ReportScope != "") {
 			return nil, fmt.Errorf("unexpected manifest/report path")
 		}
-		if manifest.Version == 2 && (manifest.Report != item.Report || manifest.ReportScope != item.Phase || manifest.ReportScope != item.ReportScope) {
+		if (manifest.Version == 2 || (manifest.Version == 3 && manifest.ReportScope != "")) && (manifest.Report != item.Report || manifest.ReportScope != item.Phase || manifest.ReportScope != item.ReportScope) {
 			return nil, fmt.Errorf("unexpected unified report reference")
 		}
 		plan := loginPlan{Path: item.Manifest, Manifest: manifest, Report: map[string]any{}, Files: []filePlan{}}
 		for _, record := range manifest.Files {
+			if record.Delete && (manifest.Version < 3 || record.JSONUpdates != nil || record.SHA256 != hashBytes(nil)) {
+				return nil, fmt.Errorf("invalid staged deletion: %s", record.Path)
+			}
 			if !filepath.IsAbs(record.Path) || !inside(c.Home, record.Path) || destinations[record.Path] {
 				return nil, fmt.Errorf("unsupported/overlapping destination: %s", record.Path)
 			}
@@ -606,7 +713,13 @@ func validatePlans(c *Context, items []QueueItem) ([]loginPlan, error) {
 			if err != nil {
 				return nil, err
 			}
-			if !regexp.MustCompile(`\bv?1\.6\.2\b`).MatchString(version.Stdout) {
+			expected, _ := validation["dms_version"].(string)
+			if expected == "" {
+				// Legacy bundles were validated against 1.6.2.
+				expected = "1.6.2"
+			}
+			output, _ := validation["dms_version_output"].(string)
+			if dmsVersion(version.Stdout) != expected || output != "" && strings.TrimSpace(version.Stdout) != output {
 				return nil, fmt.Errorf("DMS version changed since staging; restage with a verified schema")
 			}
 		}
@@ -620,6 +733,7 @@ func validatePlans(c *Context, items []QueueItem) ([]loginPlan, error) {
 	}
 	return plans, nil
 }
+
 func ValidatePending(c *Context) error {
 	items, err := PendingItems(c)
 	if err != nil {
@@ -671,13 +785,25 @@ func NoDesktop(c *Context) error {
 	}
 	return nil
 }
+
 func commitFile(c *Context, plan *loginPlan, path string, data []byte, mode os.FileMode) error {
+	return commitChange(c, plan, path, data, mode, false)
+}
+
+func commitChange(c *Context, plan *loginPlan, path string, data []byte, mode os.FileMode, remove bool) error {
 	saved := filepath.Join(filepath.Dir(plan.Path), "backups", "profile", "login-files", pathID(path))
 	oldHash, err := FileHash(path)
 	if err != nil {
 		return err
 	}
-	record := map[string]any{"path": path, "backup": nil, "mode": nil, "sha256": hashBytes(data), "previous_sha256": nullableHash(oldHash), "write_journal_version": 2}
+	record := map[string]any{
+		"path":                  path,
+		"backup":                nil,
+		"mode":                  nil,
+		"sha256":                hashBytes(data),
+		"previous_sha256":       nullableHash(oldHash),
+		"write_journal_version": 2,
+	}
 	if oldHash != "" {
 		oldData, err := os.ReadFile(path)
 		if err != nil {
@@ -697,8 +823,15 @@ func commitFile(c *Context, plan *loginPlan, path string, data []byte, mode os.F
 	if err = WriteProfileReport(plan.Manifest.Report, plan.Manifest.ReportScope, plan.Report); err != nil {
 		return err
 	}
+	if remove {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		return nil
+	}
 	return AtomicWrite(path, data, mode)
 }
+
 func ApplyPending(c *Context) error {
 	if err := NoDesktop(c); err != nil {
 		return err
@@ -737,7 +870,7 @@ func ApplyPending(c *Context) error {
 		}
 		for _, file := range plan.Files {
 			record := file.Record
-			if err = commitFile(c, plan, record.Path, file.Data, os.FileMode(record.Mode)); err != nil {
+			if err = commitChange(c, plan, record.Path, file.Data, os.FileMode(record.Mode), record.Delete); err != nil {
 				return err
 			}
 			if record.OwnershipMarker != "" {
@@ -767,7 +900,12 @@ func ApplyPending(c *Context) error {
 					}
 				}
 			}
-			data, e := jsonBytes(map[string]any{"report": plan.Manifest.Report, "report_scope": plan.Manifest.ReportScope, "main_config": plan.Manifest.Validation["main_config"], "startup_method": "Hyprland start hook -> dms run"})
+			data, e := jsonBytes(map[string]any{
+				"report":         plan.Manifest.Report,
+				"report_scope":   plan.Manifest.ReportScope,
+				"main_config":    plan.Manifest.Validation["main_config"],
+				"startup_method": "Hyprland start hook -> dms run",
+			})
 			if e != nil {
 				return e
 			}
@@ -799,6 +937,7 @@ func ApplyPending(c *Context) error {
 	_, err = c.Run("systemctl", "--user", "daemon-reload")
 	return err
 }
+
 func cancelPending(c *Context) error {
 	items, err := PendingItems(c)
 	if err != nil {
@@ -889,6 +1028,7 @@ func CancelMissingPending(c *Context, phase string) error {
 	}
 	return writeQueue(c, remaining)
 }
+
 func LoginMain(c *Context) error {
 	root := stateRoot(c)
 	if err := os.MkdirAll(root, 0700); err != nil {
@@ -904,7 +1044,11 @@ func LoginMain(c *Context) error {
 	}
 	defer lock.Close()
 	fail := func(cause error) error {
-		_ = WriteJSON(filepath.Join(root, "login-status.json"), map[string]any{"status": "blocked", "error": cause.Error(), "follow_up": "Use a TTY to inspect reports and explicitly restore/cancel the named stage."})
+		_ = WriteJSON(filepath.Join(root, "login-status.json"), map[string]any{
+			"status":    "blocked",
+			"error":     cause.Error(),
+			"follow_up": "Use a TTY to inspect reports and explicitly restore/cancel the named stage.",
+		})
 		return fmt.Errorf("desktop login blocked: %w", cause)
 	}
 	if err = syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
@@ -969,6 +1113,10 @@ func LoginMain(c *Context) error {
 	if err = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN); err != nil {
 		return err
 	}
-	_, err = c.Command(Command{Args: []string{binary, "--config", main}, Env: map[string]string{"XDG_CURRENT_DESKTOP": "Hyprland", "XDG_SESSION_DESKTOP": "Hyprland", "XDG_SESSION_TYPE": "wayland"}, Interactive: true})
+	_, err = c.Command(Command{
+		Args:        []string{binary, "--config", main},
+		Env:         map[string]string{"XDG_CURRENT_DESKTOP": "Hyprland", "XDG_SESSION_DESKTOP": "Hyprland", "XDG_SESSION_TYPE": "wayland"},
+		Interactive: true,
+	})
 	return err
 }

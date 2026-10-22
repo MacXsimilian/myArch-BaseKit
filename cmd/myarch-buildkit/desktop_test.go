@@ -10,12 +10,16 @@ import (
 )
 
 type desktopRunner struct {
-	calls                                                        []Command
-	dmsVersion, packageVersion, sourceRoot, pluginStates, groups string
-	slurpReply                                                   string
-	slurpCode                                                    int
-	corruptPNG, copyFailure                                      bool
-	override                                                     func(Command) (CommandResult, bool)
+	calls                   []Command
+	dmsVersion              string
+	packageVersion          string
+	sourceRoot              string
+	pluginStates            string
+	groups                  string
+	slurpReply              string
+	slurpCode               int
+	corruptPNG, copyFailure bool
+	override                func(Command) (CommandResult, bool)
 }
 
 func (r *desktopRunner) Execute(cmd Command) (CommandResult, error) {
@@ -36,12 +40,12 @@ func (r *desktopRunner) Execute(cmd Command) (CommandResult, error) {
 		}
 	case joined == "pacman -Q dms-shell":
 		result.Stdout = "dms-shell " + r.packageVersion + "\n"
-	case joined == "dms version":
+	case joined == "dms version" || joined == "/usr/bin/dms version":
 		result.Stdout = "dms v" + r.dmsVersion + "\n"
 	case len(cmd.Args) > 3 && cmd.Args[0] == "git" && cmd.Args[len(cmd.Args)-1] == "HEAD":
 		for _, plugin := range RequestedPlugins {
 			if filepath.Base(cmd.Args[2]) == plugin.ID {
-				result.Stdout = plugin.Commit + "\n"
+				result.Stdout = strings.Repeat("a", 40) + "\n"
 			}
 		}
 	case strings.Contains(joined, "theme getMode"):
@@ -83,6 +87,7 @@ func (r *desktopRunner) Execute(cmd Command) (CommandResult, error) {
 	}
 	return result, nil
 }
+
 func desktopContext(t *testing.T) (*Context, *desktopRunner) {
 	t.Helper()
 	c, _ := storageContext(t)
@@ -98,7 +103,14 @@ func desktopContext(t *testing.T) (*Context, *desktopRunner) {
 		storagePut(t, filepath.Join(root, "name"), keyboard.name)
 		storagePut(t, filepath.Join(root, "id/bustype"), keyboard.bus)
 	}
-	c.Inventory = map[string]any{"active_config": main, "hyprland_version": "Hyprland 0.54.3", "hyprland_binary": "/usr/bin/Hyprland", "input_root": inputRoot, "monitors": []map[string]any{{"name": "eDP-1", "width": 2880, "height": 1800}, {"name": "DP-1", "width": 2560, "height": 1440}}, "devices": map[string]any{"keyboards": []map[string]any{{"name": "internal-keyboard"}, {"name": "usb-keyboard"}, {"name": "bluetooth-keyboard"}}}}
+	c.Inventory = map[string]any{
+		"active_config":    main,
+		"hyprland_version": "Hyprland 0.54.3",
+		"hyprland_binary":  "/usr/bin/Hyprland",
+		"input_root":       inputRoot,
+		"monitors":         []map[string]any{{"name": "eDP-1", "width": 2880, "height": 1800}, {"name": "DP-1", "width": 2560, "height": 1440}},
+		"devices":          map[string]any{"keyboards": []map[string]any{{"name": "internal-keyboard"}, {"name": "usb-keyboard"}, {"name": "bluetooth-keyboard"}}},
+	}
 	for _, name := range []string{"com.mitchellh.ghostty", "org.gnome.Nautilus", "code"} {
 		storagePut(t, filepath.Join(c.DataHome, "applications", name+".desktop"), "[Desktop Entry]\n")
 	}
@@ -116,6 +128,7 @@ func desktopContext(t *testing.T) (*Context, *desktopRunner) {
 	}
 	return c, r
 }
+
 func desktopStage(t *testing.T, c *Context) {
 	t.Helper()
 	if err := ConfigureLaptop(c); err != nil {
@@ -125,6 +138,7 @@ func desktopStage(t *testing.T, c *Context) {
 		t.Fatal(err)
 	}
 }
+
 func desktopObject(t *testing.T, path string) map[string]any {
 	t.Helper()
 	value, err := desktopReadObject(path, nil)
@@ -147,6 +161,7 @@ func TestLaptopExactScaleAndNoSubstitution(t *testing.T) {
 		}
 	}
 }
+
 func TestLaptopInternalKeyboardVerificationExcludesExternal(t *testing.T) {
 	c, _ := desktopContext(t)
 	roles, err := KeyboardRoles(c)
@@ -157,6 +172,7 @@ func TestLaptopInternalKeyboardVerificationExcludesExternal(t *testing.T) {
 		t.Fatal(roles)
 	}
 }
+
 func TestLaptopUnverifiedKeyboardBlocksBeforeWrites(t *testing.T) {
 	c, r := desktopContext(t)
 	r.override = func(cmd Command) (CommandResult, bool) {
@@ -170,6 +186,7 @@ func TestLaptopUnverifiedKeyboardBlocksBeforeWrites(t *testing.T) {
 		t.Fatal("unverified hardware changed configuration")
 	}
 }
+
 func TestLaptopStaticPreferencesOnlyForBothFormats(t *testing.T) {
 	c, r := desktopContext(t)
 	if err := ConfigureLaptop(c); err != nil {
@@ -202,6 +219,7 @@ func TestLaptopStaticPreferencesOnlyForBothFormats(t *testing.T) {
 		}
 	}
 }
+
 func TestDesktopFreshPreservesDefaultAppearanceAndStagesPlugins(t *testing.T) {
 	c, r := desktopContext(t)
 	desktopStage(t, c)
@@ -232,7 +250,7 @@ func TestDesktopFreshPreservesDefaultAppearanceAndStagesPlugins(t *testing.T) {
 		t.Fatal("active desktop overwritten")
 	}
 	for _, call := range r.calls {
-		if desktopContainsString(call.Args, "start") || desktopContainsString(call.Args, "stop") {
+		if contains(call.Args, "start") || contains(call.Args, "stop") {
 			t.Fatal("live startup mutation")
 		}
 	}
@@ -241,6 +259,7 @@ func TestDesktopFreshPreservesDefaultAppearanceAndStagesPlugins(t *testing.T) {
 		t.Fatal(wrapper)
 	}
 }
+
 func TestDesktopExistingPersonalSettingsAndCustomFileSurvive(t *testing.T) {
 	c, _ := desktopContext(t)
 	settingsPath := filepath.Join(c.ConfigHome, "DankMaterialShell/settings.json")
@@ -264,6 +283,7 @@ func TestDesktopExistingPersonalSettingsAndCustomFileSurvive(t *testing.T) {
 		t.Fatal("existing screen preferences lost")
 	}
 }
+
 func TestDesktopUnsupportedSchemaStopsBeforeDesktopWrites(t *testing.T) {
 	c, r := desktopContext(t)
 	r.dmsVersion = "1.6.3"
@@ -273,6 +293,7 @@ func TestDesktopUnsupportedSchemaStopsBeforeDesktopWrites(t *testing.T) {
 		t.Fatal("unsupported schema staged writes")
 	}
 }
+
 func TestDesktopInstalledSourceRequiresCompleteVerifiedSchema(t *testing.T) {
 	c, r := desktopContext(t)
 	root := filepath.Join(c.Home, "qml")
@@ -298,6 +319,7 @@ func TestDesktopInstalledSourceRequiresCompleteVerifiedSchema(t *testing.T) {
 		t.Fatalf("%s %v", verified, err)
 	}
 }
+
 func TestDesktopUnknownConfigVersionIsPreserved(t *testing.T) {
 	c, _ := desktopContext(t)
 	path := filepath.Join(c.ConfigHome, "DankMaterialShell/settings.json")
@@ -307,13 +329,27 @@ func TestDesktopUnknownConfigVersionIsPreserved(t *testing.T) {
 		t.Fatal("unknown config changed")
 	}
 }
+
 func TestDesktopBothVerifiedFormatsKeepShortcutBehavior(t *testing.T) {
 	for _, format := range []string{"lua", "hyprlang"} {
 		text, err := DesktopConfigText(format, "/home/test/startup", "/home/test/shot", "/home/test/clip", "/home/test/laptop")
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, expected := range []string{"ghostty", "nautilus", "code", "toggleWith apps", "clip", "region", "focused", "audio increment 5", "brightness decrement 5", "laptop", "mouse:272", "mouse:273"} {
+		for _, expected := range []string{
+			"ghostty",
+			"nautilus",
+			"code",
+			"toggleWith apps",
+			"clip",
+			"region",
+			"focused",
+			"audio increment 5",
+			"brightness decrement 5",
+			"laptop",
+			"mouse:272",
+			"mouse:273",
+		} {
 			if !strings.Contains(text, expected) {
 				t.Fatalf("missing %s", expected)
 			}
@@ -325,9 +361,13 @@ func TestDesktopBothVerifiedFormatsKeepShortcutBehavior(t *testing.T) {
 		}
 	}
 	c, _ := desktopContext(t)
-	c.Inventory["hyprland_version"] = "Hyprland 0.55.0"
-	storageRequireError(t, ConfigureDesktop(c), "unverified Hyprland")
+	c.Inventory["hyprland_version"] = "Hyprland 0.99.0"
+	_, format, err := DesktopFormat(c)
+	if err != nil || format != "hyprlang" {
+		t.Fatalf("newer version rejected before native validation: %s %v", format, err)
+	}
 }
+
 func TestDesktopKnownAutostartsDisabledByOverridesOnly(t *testing.T) {
 	c, _ := desktopContext(t)
 	path := filepath.Join(c.ConfigHome, "autostart/waybar.desktop")
@@ -343,11 +383,14 @@ func TestDesktopKnownAutostartsDisabledByOverridesOnly(t *testing.T) {
 	_, err = DesktopAutostarts(c)
 	storageRequireError(t, err, "unrecognized wrapper")
 }
-func TestPluginExistingInstallationAndPreferencesArePreserved(t *testing.T) {
+
+func TestPluginExistingInstallationUpdatesAtLoginAndPreservesPreferences(t *testing.T) {
 	c, _ := desktopContext(t)
 	root := filepath.Join(c.ConfigHome, "DankMaterialShell/plugins/personal-docker")
 	storagePut(t, filepath.Join(root, "plugin.json"), `{"id":"dockerManager","component":"Personal.qml"}`)
 	storagePut(t, filepath.Join(root, "Personal.qml"), "personal content")
+	snapshot, _ := jsonBytes(pluginSnapshot{Destination: root, Files: map[string]string{"Personal.qml": hashBytes([]byte("personal content"))}})
+	storagePut(t, pluginSnapshotPath(c, "dockerManager"), string(snapshot))
 	settingsPath := filepath.Join(c.ConfigHome, "DankMaterialShell/plugin_settings.json")
 	storagePut(t, settingsPath, `{"dockerManager":{"filter":"mine","enabled":false},"other":{"enabled":true}}`)
 	if err := ConfigurePlugins(c); err != nil {
@@ -358,9 +401,27 @@ func TestPluginExistingInstallationAndPreferencesArePreserved(t *testing.T) {
 		t.Fatal(settings)
 	}
 	if storageRead(t, filepath.Join(root, "Personal.qml")) != "personal content" || exists(c.View(filepath.Join(c.ConfigHome, "DankMaterialShell/plugins/dockerManager/plugin.json"))) {
-		t.Fatal("existing plugin was replaced")
+		t.Fatal("existing plugin was replaced live or duplicated")
+	}
+	if storageRead(t, c.View(filepath.Join(root, "plugin.json"))) == storageRead(t, filepath.Join(root, "plugin.json")) {
+		t.Fatal("upstream update was not staged")
+	}
+	storagePublish(t, c)
+	if err := ApplyPending(c); err != nil {
+		t.Fatal(err)
+	}
+	if exists(filepath.Join(root, "Personal.qml")) || !exists(filepath.Join(root, "Widget.qml")) {
+		t.Fatal("plugin update retained stale code or omitted new code")
+	}
+	c.Pending = nil
+	if err := RestoreContext(c); err != nil {
+		t.Fatal(err)
+	}
+	if storageRead(t, filepath.Join(root, "Personal.qml")) != "personal content" || exists(filepath.Join(root, "Widget.qml")) {
+		t.Fatal("plugin update did not restore original code")
 	}
 }
+
 func TestPluginSnapshotRejectsWrongManifestSymlinksAndEscapes(t *testing.T) {
 	c, _ := desktopContext(t)
 	plugin := RequestedPlugins[0]
@@ -378,6 +439,7 @@ func TestPluginSnapshotRejectsWrongManifestSymlinksAndEscapes(t *testing.T) {
 	_, err := PluginManifest(source, "dockerManager")
 	storageRequireError(t, err, "unsafe")
 }
+
 func TestPluginLoginMergeRetainsLateRuntimePreferences(t *testing.T) {
 	c, _ := desktopContext(t)
 	path := filepath.Join(c.ConfigHome, "DankMaterialShell/plugin_settings.json")
@@ -395,11 +457,18 @@ func TestPluginLoginMergeRetainsLateRuntimePreferences(t *testing.T) {
 		t.Fatal(plugin)
 	}
 }
+
 func TestDesktopRuntimeChecksReportPluginAndInputAccess(t *testing.T) {
 	c, r := desktopContext(t)
 	t.Setenv("WAYLAND_DISPLAY", "wayland-test")
 	t.Setenv("HYPRLAND_INSTANCE_SIGNATURE", "test")
-	policy := map[string]any{"internal_outputs": []string{"eDP-1"}, "internal_keyboards": []string{"internal-keyboard"}, "internal_scale": 4.0 / 3, "internal_keyboard": "hu", "natural_scroll": true}
+	policy := map[string]any{
+		"internal_outputs":   []string{"eDP-1"},
+		"internal_keyboards": []string{"internal-keyboard"},
+		"internal_scale":     4.0 / 3,
+		"internal_keyboard":  "hu",
+		"natural_scroll":     true,
+	}
 	raw, _ := json.Marshal(policy)
 	storagePut(t, filepath.Join(c.ConfigHome, "myarch-buildkit/laptop.json"), string(raw))
 	if err := CheckDesktop(c); err != nil {
@@ -415,6 +484,7 @@ func TestDesktopRuntimeChecksReportPluginAndInputAccess(t *testing.T) {
 		t.Fatal(failures)
 	}
 }
+
 func TestWallpaperExistingAndExplicitTOMLImageIsPreserved(t *testing.T) {
 	c, _ := desktopContext(t)
 	session := map[string]any{"wallpaperPath": "/old/preference.png"}
@@ -431,6 +501,7 @@ func TestWallpaperExistingAndExplicitTOMLImageIsPreserved(t *testing.T) {
 		t.Fatalf("%v %v", record, session)
 	}
 }
+
 func TestScreenshotCancellationLeavesNoFile(t *testing.T) {
 	c, r := desktopContext(t)
 	r.slurpCode = 1
@@ -441,6 +512,7 @@ func TestScreenshotCancellationLeavesNoFile(t *testing.T) {
 		t.Fatal("cancellation created a file")
 	}
 }
+
 func TestScreenshotCorruptPNGRemovedAndCopyFailureKeepsImage(t *testing.T) {
 	c, r := desktopContext(t)
 	r.corruptPNG = true
@@ -459,6 +531,7 @@ func TestScreenshotCorruptPNGRemovedAndCopyFailureKeepsImage(t *testing.T) {
 		t.Fatal("valid saved image removed after copy failure")
 	}
 }
+
 func TestClipboardCommandsKeepExplicitEnablementAndLimit(t *testing.T) {
 	c, r := desktopContext(t)
 	if err := ClipboardMain(c, []string{"enable"}); err != nil {
@@ -477,6 +550,7 @@ func TestClipboardCommandsKeepExplicitEnablementAndLimit(t *testing.T) {
 	}
 	storageRequireError(t, ClipboardMain(c, []string{"unknown"}), "usage")
 }
+
 func TestDesktopSessionRequiresIntendedSession(t *testing.T) {
 	c, r := desktopContext(t)
 	t.Setenv("WAYLAND_DISPLAY", "")

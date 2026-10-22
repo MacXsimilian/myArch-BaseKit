@@ -13,8 +13,12 @@ import (
 	"syscall"
 )
 
-func hashBytes(data []byte) string { sum := sha256.Sum256(data); return hex.EncodeToString(sum[:]) }
-func pathID(path string) string    { return hashBytes([]byte(path)) }
+func hashBytes(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
+}
+
+func pathID(path string) string { return hashBytes([]byte(path)) }
 
 // securePath refuses symlinks and files another user can replace. Missing files
 // are accepted only when their nearest existing parent belongs to this user.
@@ -75,6 +79,7 @@ func securePath(path string, missing bool) error {
 	}
 	return ownedInfo(parent, parentInfo)
 }
+
 func ownedInfo(path string, info os.FileInfo) error {
 	st, ok := info.Sys().(*syscall.Stat_t)
 	if !ok || int(st.Uid) != os.Getuid() || info.Mode().Perm()&0022 != 0 {
@@ -121,6 +126,7 @@ func AtomicWrite(path string, data []byte, mode os.FileMode) error {
 	}
 	return err
 }
+
 func jsonBytes(value any) ([]byte, error) {
 	data, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
@@ -128,6 +134,7 @@ func jsonBytes(value any) ([]byte, error) {
 	}
 	return append(data, '\n'), nil
 }
+
 func WriteJSON(path string, value any) error {
 	data, err := jsonBytes(value)
 	if err != nil {
@@ -135,6 +142,7 @@ func WriteJSON(path string, value any) error {
 	}
 	return AtomicWrite(path, data, 0600)
 }
+
 func ReadJSON(path string, out any) error {
 	if err := securePath(path, false); err != nil {
 		return err
@@ -161,6 +169,7 @@ func ReadJSON(path string, out any) error {
 	}
 	return nil
 }
+
 func FileHash(path string) (string, error) {
 	if err := securePath(path, true); err != nil {
 		return "", err
@@ -188,6 +197,7 @@ func (c *Context) ensureReport() {
 		c.Report["schema_version"] = 1
 	}
 }
+
 func (c *Context) Save() error {
 	if c.CheckOnly {
 		return nil
@@ -195,25 +205,17 @@ func (c *Context) Save() error {
 	c.ensureReport()
 	return WriteProfileReport(c.ReportPath, c.ReportScope, c.Report)
 }
+
 func reportRecords(report map[string]any, key string) []map[string]any {
-	result := []map[string]any{}
-	switch values := report[key].(type) {
-	case []any:
-		for _, value := range values {
-			if item, ok := value.(map[string]any); ok {
-				result = append(result, item)
-			}
-		}
-	case []map[string]any:
-		return values
-	}
-	return result
+	return objects(report[key])
 }
+
 func appendRecord(report map[string]any, key string, record map[string]any) {
 	records := reportRecords(report, key)
 	records = append(records, record)
 	report[key] = records
 }
+
 func (c *Context) ownershipPath(path string) string {
 	root := filepath.Join(c.StateHome, "myarch-buildkit", "managed-files")
 	if inside(root, path) {
@@ -221,7 +223,16 @@ func (c *Context) ownershipPath(path string) string {
 	}
 	name := filepath.Base(path)
 	protected := strings.Contains(name, "desktop-managed") || strings.HasPrefix(name, "cachyos-") && strings.HasSuffix(name, ".service")
-	for _, value := range []string{"cachyos-laptop-session", "cachyos-desktop-session", "cachyos-dms-guard", "cachyos-screenshot", "cachyos-clipboard", "laptop.json", "laptop.lua", "laptop.conf"} {
+	for _, value := range []string{
+		"cachyos-laptop-session",
+		"cachyos-desktop-session",
+		"cachyos-dms-guard",
+		"cachyos-screenshot",
+		"cachyos-clipboard",
+		"laptop.json",
+		"laptop.lua",
+		"laptop.conf",
+	} {
 		protected = protected || name == value
 	}
 	if active, ok := c.Inventory["active_config"].(string); ok {
@@ -233,6 +244,7 @@ func (c *Context) ownershipPath(path string) string {
 	}
 	return filepath.Join(root, pathID(path)+".json")
 }
+
 func (c *Context) checkOwned(path string) error {
 	marker := c.ownershipPath(path)
 	if marker == "" || !exists(marker) {
@@ -254,6 +266,7 @@ func (c *Context) checkOwned(path string) error {
 	}
 	return nil
 }
+
 func (c *Context) backup(path string) (map[string]any, error) {
 	c.ensureReport()
 	for _, record := range reportRecords(c.Report, "file_changes") {
@@ -389,13 +402,19 @@ func (c *Context) Write(path string, data []byte, mode os.FileMode) error {
 	}
 	return c.Save()
 }
+
 func nullableHash(hash string) any {
 	if hash == "" {
 		return nil
 	}
 	return hash
 }
-func boolValue(v any) bool { value, _ := v.(bool); return value }
+
+func boolValue(v any) bool {
+	value, _ := v.(bool)
+	return value
+}
+
 func modeValue(value any, fallback os.FileMode) os.FileMode {
 	switch v := value.(type) {
 	case float64:
@@ -434,7 +453,12 @@ func RestoreContext(c *Context) error {
 	}
 	report := map[string]any{}
 	if !exists(c.ReportPath) {
-		names := map[string]string{"defaults": "desktop-report.json", "shell": "shell-report.json", "containers": "podman-report.json", "cleanup": "cleanup-report.json"}
+		names := map[string]string{
+			"defaults":   "desktop-report.json",
+			"shell":      "shell-report.json",
+			"containers": "podman-report.json",
+			"cleanup":    "cleanup-report.json",
+		}
 		if name := names[c.Options.RestoreStage]; name != "" {
 			return restoreLegacyUserReport(c, filepath.Join(c.RunDir, name))
 		}
@@ -578,6 +602,7 @@ func RestoreContext(c *Context) error {
 	}
 	return nil
 }
+
 func reversedRecords(records []map[string]any) []map[string]any {
 	out := make([]map[string]any, len(records))
 	for i, r := range records {
@@ -585,6 +610,7 @@ func reversedRecords(records []map[string]any) []map[string]any {
 	}
 	return out
 }
+
 func restoreFile(record map[string]any) error {
 	path := str(record["path"])
 	if err := securePath(path, true); err != nil {
@@ -624,6 +650,7 @@ func restoreFile(record map[string]any) error {
 	}
 	return nil
 }
+
 func restoreExternal(c *Context, failures *[]string) {
 	try := func(message string, args ...string) bool {
 		result := c.Try(args...)
@@ -716,6 +743,7 @@ func restoreExternal(c *Context, failures *[]string) {
 		}
 	}
 }
+
 func safeUnit(unit string) bool {
 	if !strings.HasSuffix(unit, ".service") {
 		return false

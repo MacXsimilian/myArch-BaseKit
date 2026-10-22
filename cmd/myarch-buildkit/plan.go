@@ -18,8 +18,11 @@ type planRequirement struct {
 }
 
 type planPackageRow struct {
-	Tool                         Tool
-	Name, Pacman, AUR, Reference string
+	Tool      Tool
+	Name      string
+	Pacman    string
+	AUR       string
+	Reference string
 }
 
 func planTableRows(o Options, s Settings, group string) []planPackageRow {
@@ -35,7 +38,12 @@ func planTableRows(o Options, s Settings, group string) []planPackageRow {
 				break
 			}
 		}
-		row := planPackageRow{Tool: tool, Name: planToolName(tool), Pacman: strings.Join(tool.RepoCandidates, ", "), AUR: strings.Join(tool.AURCandidates, ", ")}
+		row := planPackageRow{
+			Tool:   tool,
+			Name:   planToolName(tool),
+			Pacman: strings.Join(tool.RepoCandidates, ", "),
+			AUR:    strings.Join(tool.AURCandidates, ", "),
+		}
 		if requirement.Groups[0] != group {
 			row.Reference = planGroupNames[requirement.Groups[0]]
 			row.Pacman, row.AUR = "included under "+row.Reference, ""
@@ -150,7 +158,12 @@ func planTextWidth(o Options, s Settings, stages []string, color bool, width int
 		}
 		v.section("Packages")
 		fmt.Fprintf(&v.Builder, "  %-15s%13s  %s\n", "Group", "Requirements", "Included tools")
-		descriptions := map[string]string{"core": "Apps, DMS and shell tools", "utilities": "Archives, camera, recording and sharing", "development": "Git, Go, Kubernetes and infrastructure", "containers": "Podman Compose and networking"}
+		descriptions := map[string]string{
+			"core":        "Apps, DMS and shell tools",
+			"utilities":   "Archives, camera, recording and sharing",
+			"development": "Git, Go, Kubernetes and infrastructure",
+			"containers":  "Podman Compose and networking",
+		}
 		for _, group := range GroupOrder {
 			if counts[group] > 0 {
 				count := fmt.Sprint(counts[group])
@@ -209,6 +222,7 @@ func planTextWidth(o Options, s Settings, stages []string, color bool, width int
 		v.field("Natural scrolling", scroll+" for pointers and touchpads")
 		if selected("desktop") {
 			v.field("Plugins", "Docker Manager · Kubernetes · Emoji & Unicode Launcher · Bongo Cat · ClipBoard+")
+			v.note("Refresh plugin code from the latest upstream branches; back up existing files and preserve preferences.")
 		}
 		v.note("Files are staged separately and applied before Hyprland and DMS start.")
 		if !selected("desktop") {
@@ -379,7 +393,12 @@ func planCommand(o Options, command string, details bool) string {
 	for _, option := range []struct {
 		enabled bool
 		flag    string
-	}{{o.ConfigureOnly, "--configure-only"}, {o.KeepTerminal, "--keep-terminal"}, {o.EnablePodmanSocket, "--enable-podman-socket"}, {details, "--details"}} {
+	}{
+		{o.ConfigureOnly, "--configure-only"},
+		{o.KeepTerminal, "--keep-terminal"},
+		{o.EnablePodmanSocket, "--enable-podman-socket"},
+		{details, "--details"},
+	} {
 		if option.enabled {
 			args = append(args, option.flag)
 		}
@@ -402,7 +421,12 @@ func planShellWords(args []string) string {
 }
 
 func planTerminalWidth() int {
-	var size struct{ Rows, Cols, X, Y uint16 }
+	var size struct {
+		Rows uint16
+		Cols uint16
+		X    uint16
+		Y    uint16
+	}
 	_, _, err := syscall.Syscall(syscall.SYS_IOCTL, os.Stdout.Fd(), syscall.TIOCGWINSZ, uintptr(unsafe.Pointer(&size)))
 	if err == 0 && size.Cols > 0 {
 		return int(size.Cols)

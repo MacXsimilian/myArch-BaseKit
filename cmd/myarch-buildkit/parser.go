@@ -94,6 +94,33 @@ func jsonSkip(text string, at int) int {
 	return at
 }
 
+// withoutTrailingJSONCommas preserves byte offsets, just like stripJSONC.
+// Quoted strings are skipped so punctuation inside values remains untouched.
+func withoutTrailingJSONCommas(text string) (string, error) {
+	chars := []byte(text)
+	for i := 0; i < len(chars); {
+		if chars[i] == '"' {
+			_, next, err := jsonValueAt(text, i)
+			if err != nil {
+				return "", err
+			}
+			i = next
+		} else if chars[i] == ',' {
+			next := jsonSkip(text, i+1)
+			if next < len(chars) && (chars[next] == '}' || chars[next] == ']') {
+				chars[i] = ' '
+			}
+			i++
+		} else {
+			i++
+		}
+	}
+	return string(chars), nil
+}
+
+// jsonObjectPatch updates an object in place, preserving unrelated fields and comments.
+type jsonObjectPatch map[string]any
+
 // EditJSONC edits selected top-level properties without evaluating the document.
 // Duplicate selected keys are rejected rather than guessing which one is active.
 func EditJSONC(text string, desired map[string]any) (string, error) {
@@ -105,25 +132,10 @@ func EditJSONC(text string, desired map[string]any) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	chars := []byte(uncommented)
-	for i := 0; i < len(chars); {
-		if chars[i] == '"' {
-			_, next, err := jsonValueAt(uncommented, i)
-			if err != nil {
-				return "", err
-			}
-			i = next
-		} else if chars[i] == ',' {
-			next := jsonSkip(uncommented, i+1)
-			if next < len(chars) && (chars[next] == '}' || chars[next] == ']') {
-				chars[i] = ' '
-			}
-			i++
-		} else {
-			i++
-		}
+	clean, err := withoutTrailingJSONCommas(uncommented)
+	if err != nil {
+		return "", err
 	}
-	clean := string(chars)
 	d := json.NewDecoder(strings.NewReader(clean))
 	d.UseNumber()
 	var parsed map[string]any
@@ -192,6 +204,17 @@ func EditJSONC(text string, desired map[string]any) (string, error) {
 	edits := []textEdit{}
 	missing := []string{}
 	for _, key := range keys {
+		if patch, ok := desired[key].(jsonObjectPatch); ok {
+			if _, object := parsed[key].(map[string]any); object {
+				where := properties[key]
+				updated, err := EditJSONC(text[where[0]:where[1]], map[string]any(patch))
+				if err != nil {
+					return "", err
+				}
+				edits = append(edits, textEdit{start: where[0], end: where[1], value: updated})
+				continue
+			}
+		}
 		encoded, err := json.Marshal(desired[key])
 		if err != nil {
 			return "", err
@@ -199,7 +222,7 @@ func EditJSONC(text string, desired map[string]any) (string, error) {
 		if where, ok := properties[key]; ok {
 			current, _ := json.Marshal(parsed[key])
 			if string(current) != string(encoded) {
-				edits = append(edits, textEdit{where[0], where[1], string(encoded)})
+				edits = append(edits, textEdit{start: where[0], end: where[1], value: string(encoded)})
 			}
 		} else {
 			encodedKey, _ := json.Marshal(key)
@@ -227,10 +250,10 @@ func EditJSONC(text string, desired map[string]any) (string, error) {
 			if insert == lastEnd {
 				addition = "," + addition
 			} else {
-				edits = append(edits, textEdit{lastEnd, lastEnd, ","})
+				edits = append(edits, textEdit{start: lastEnd, end: lastEnd, value: ","})
 			}
 		}
-		edits = append(edits, textEdit{insert, insert, addition})
+		edits = append(edits, textEdit{start: insert, end: insert, value: addition})
 	}
 	return applyTextEdits(text, edits)
 }
@@ -243,6 +266,7 @@ func sortedMapKeys[V any](m map[string]V) []string {
 	sort.Strings(result)
 	return result
 }
+
 func sourceNewline(text string) string {
 	if strings.Contains(text, "\r\n") {
 		return "\r\n"
@@ -366,6 +390,7 @@ func editMIMESection(text string, intended map[string]string, defaults bool) str
 func EditMIMEAssociations(text string, intended map[string]string) string {
 	return editMIMESection(text, intended, false)
 }
+
 func EditMIMEDefaults(text string, intended map[string]string) string {
 	return editMIMESection(text, intended, true)
 }

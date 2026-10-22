@@ -40,31 +40,7 @@ func checkText(o Options, c *Context, checkErr error) string {
 		checkContainerDetails(v, containers)
 	}
 
-	defaults := checkDefaultsMap(report["defaults_check"])
-	if len(defaults) > 0 {
-		v.section("App defaults")
-		for _, item := range [][2]string{{"Terminal", "terminal"}, {"Files", "inode/directory"}, {"Text files", "text/plain"}, {"Markdown", "text/markdown"}, {"PDF", "application/pdf"}, {"Audio", "audio/mpeg"}, {"Video", "video/mp4"}, {"Notes links", "x-scheme-handler/obsidian"}, {"Font", "font"}} {
-			value, present := defaults[item[1]]
-			if !present {
-				continue
-			}
-			if item[1] == "font" {
-				value = strings.Split(value, ",")[0]
-			} else {
-				value = checkAppName(value)
-			}
-			if value == "" {
-				value = "Not set"
-			}
-			v.field(item[0], value)
-			if o.Details && item[1] != "font" && defaults[item[1]] != "" {
-				v.note(defaults[item[1]])
-			}
-		}
-		if o.Details && defaults["terminal_command"] != "" {
-			v.field("Terminal command", strings.ReplaceAll(defaults["terminal_command"], "\n", " "))
-		}
-	}
+	checkDefaultApps(v, report, o.Details)
 
 	pending := object(report["pending_configuration"])
 	v.section("Pending setup")
@@ -87,43 +63,7 @@ func checkText(o Options, c *Context, checkErr error) string {
 		}
 	}
 
-	running := object(report["running_desktop"])
-	v.section("Running desktop")
-	observationOnly := running["status"] == "observed" || running["status"] == "not_observed"
-	switch {
-	case running["status"] == "not_observed":
-		v.field("Hyprland + DMS", "Not observed")
-		if reason, ok := running["reason"].(string); ok && reason != "" {
-			v.note(reason)
-		}
-	case !observationOnly && running["ready"] == true:
-		v.field("Hyprland + DMS", "Passed · running session verified")
-	case !observationOnly && running["ready"] == false:
-		v.field("Hyprland + DMS", "Needs attention")
-	case running["dms_responding"] == true:
-		v.field("DMS", "Responding · full runtime checks not completed")
-	case running["dms_responding"] == false || running["dms_ipc_exit_code"] != nil:
-		v.field("DMS", "Not responding · full runtime checks not completed")
-	default:
-		v.field("Hyprland + DMS", "Not checked")
-	}
-	if !observationOnly && running["ready"] != nil {
-		laptop := object(report["laptop"])
-		v.field("Laptop settings", checkObservedState(laptop["ready"]))
-	} else if observationOnly {
-		v.field("Laptop settings", "Not checked · observation only")
-	}
-	if o.Details {
-		if method, ok := running["startup_method"].(string); ok && method != "" {
-			v.field("DMS startup", method)
-		}
-		plugins := object(running["plugins"])
-		for _, plugin := range RequestedPlugins {
-			if value, ok := plugins[plugin.ID].(string); ok {
-				v.field(checkPluginName(plugin.ID), value)
-			}
-		}
-	}
+	checkRunningDesktop(v, report, o.Details)
 
 	issues := checkIssues(report, checkErr)
 	if len(issues) > 0 {
@@ -159,6 +99,86 @@ func checkText(o Options, c *Context, checkErr error) string {
 	}
 	v.command("JSON report", checkOutputCommand(o, "--json"))
 	return v.String()
+}
+
+func checkDefaultApps(v *planView, report map[string]any, details bool) {
+	defaults := checkDefaultsMap(report["defaults_check"])
+	if len(defaults) > 0 {
+		v.section("App defaults")
+		for _, item := range [][2]string{
+			{"Terminal", "terminal"},
+			{"Files", "inode/directory"},
+			{"Text files", "text/plain"},
+			{"Markdown", "text/markdown"},
+			{"PDF", "application/pdf"},
+			{"Audio", "audio/mpeg"},
+			{"Video", "video/mp4"},
+			{"Notes links", "x-scheme-handler/obsidian"},
+			{"Font", "font"},
+		} {
+			value, present := defaults[item[1]]
+			if !present {
+				continue
+			}
+			if item[1] == "font" {
+				value = strings.Split(value, ",")[0]
+			} else {
+				value = checkAppName(value)
+			}
+			if value == "" {
+				value = "Not set"
+			}
+			v.field(item[0], value)
+			if details && item[1] != "font" && defaults[item[1]] != "" {
+				v.note(defaults[item[1]])
+			}
+		}
+		if details && defaults["terminal_command"] != "" {
+			v.field("Terminal command", strings.ReplaceAll(defaults["terminal_command"], "\n", " "))
+		}
+	}
+
+}
+
+func checkRunningDesktop(v *planView, report map[string]any, details bool) {
+	running := object(report["running_desktop"])
+	v.section("Running desktop")
+	observationOnly := running["status"] == "observed" || running["status"] == "not_observed"
+	switch {
+	case running["status"] == "not_observed":
+		v.field("Hyprland + DMS", "Not observed")
+		if reason, ok := running["reason"].(string); ok && reason != "" {
+			v.note(reason)
+		}
+	case !observationOnly && running["ready"] == true:
+		v.field("Hyprland + DMS", "Passed · running session verified")
+	case !observationOnly && running["ready"] == false:
+		v.field("Hyprland + DMS", "Needs attention")
+	case running["dms_responding"] == true:
+		v.field("DMS", "Responding · full runtime checks not completed")
+	case running["dms_responding"] == false || running["dms_ipc_exit_code"] != nil:
+		v.field("DMS", "Not responding · full runtime checks not completed")
+	default:
+		v.field("Hyprland + DMS", "Not checked")
+	}
+	if !observationOnly && running["ready"] != nil {
+		laptop := object(report["laptop"])
+		v.field("Laptop settings", checkObservedState(laptop["ready"]))
+	} else if observationOnly {
+		v.field("Laptop settings", "Not checked · observation only")
+	}
+	if details {
+		if method, ok := running["startup_method"].(string); ok && method != "" {
+			v.field("DMS startup", method)
+		}
+		plugins := object(running["plugins"])
+		for _, plugin := range RequestedPlugins {
+			if value, ok := plugins[plugin.ID].(string); ok {
+				v.field(checkPluginName(plugin.ID), value)
+			}
+		}
+	}
+
 }
 
 func checkState(report map[string]any, name string, observed any) string {
@@ -200,9 +220,15 @@ func checkAppName(id string) string {
 		return ""
 	}
 	names := map[string]string{
-		"com.mitchellh.ghostty.desktop": "Ghostty", "org.gnome.Nautilus.desktop": "GNOME Files",
-		"com.microsoft.VSCode.desktop": "VS Code", "code.desktop": "VS Code", "visual-studio-code.desktop": "VS Code",
-		MarkdownDesktop: "Obsidian", "obsidian.desktop": "Obsidian", "firefox.desktop": "Firefox", "vlc.desktop": "VLC",
+		"com.mitchellh.ghostty.desktop": "Ghostty",
+		"org.gnome.Nautilus.desktop":    "GNOME Files",
+		"com.microsoft.VSCode.desktop":  "VS Code",
+		"code.desktop":                  "VS Code",
+		"visual-studio-code.desktop":    "VS Code",
+		MarkdownDesktop:                 "Obsidian",
+		"obsidian.desktop":              "Obsidian",
+		"firefox.desktop":               "Firefox",
+		"vlc.desktop":                   "VLC",
 	}
 	if name, ok := names[id]; ok {
 		return name
@@ -211,7 +237,13 @@ func checkAppName(id string) string {
 }
 
 func checkPluginName(id string) string {
-	names := map[string]string{"dockerManager": "Docker Manager", "kubernetes": "Kubernetes", "emojiLauncher": "Emoji & Unicode", "bongoCat": "Bongo Cat", "clipboardPlus": "ClipBoard+"}
+	names := map[string]string{
+		"dockerManager": "Docker Manager",
+		"kubernetes":    "Kubernetes",
+		"emojiLauncher": "Emoji & Unicode",
+		"bongoCat":      "Bongo Cat",
+		"clipboardPlus": "ClipBoard+",
+	}
 	if name, ok := names[id]; ok {
 		return name
 	}

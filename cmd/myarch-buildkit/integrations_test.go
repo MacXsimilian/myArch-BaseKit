@@ -24,15 +24,27 @@ func (r *integrationRunner) Execute(command Command) (CommandResult, error) {
 	}
 	return CommandResult{}, nil
 }
+
 func integrationContext(t *testing.T, runner Runner) *Context {
 	t.Helper()
 	home := t.TempDir()
-	c := &Context{Home: home, ConfigHome: filepath.Join(home, ".config"), StateHome: filepath.Join(home, ".local/state"), DataHome: filepath.Join(home, ".local/share"), CacheHome: filepath.Join(home, ".cache"), RunDir: filepath.Join(home, "run"), Report: map[string]any{}, Runner: runner, Inventory: map[string]any{}}
+	c := &Context{
+		Home:       home,
+		ConfigHome: filepath.Join(home, ".config"),
+		StateHome:  filepath.Join(home, ".local/state"),
+		DataHome:   filepath.Join(home, ".local/share"),
+		CacheHome:  filepath.Join(home, ".cache"),
+		RunDir:     filepath.Join(home, "run"),
+		Report:     map[string]any{},
+		Runner:     runner,
+		Inventory:  map[string]any{},
+	}
 	c.BinDir = filepath.Join(home, ".local/bin")
 	c.ReportPath = filepath.Join(c.RunDir, "profile-report.json")
 	t.Setenv("ZDOTDIR", home)
 	return c
 }
+
 func integrationParserFiles(t *testing.T) {
 	t.Helper()
 	bin := t.TempDir()
@@ -54,7 +66,11 @@ func TestManagedShellMarkersPreserveBytes(t *testing.T) {
 	if result != user+"# tail\n" {
 		t.Fatalf("lost user bytes: %q", result)
 	}
-	for _, bad := range []string{shellBlockEnd + "\n", shellBlockBegin + "\n", shellBlockBegin + "\n" + shellBlockBegin + "\n" + shellBlockEnd + "\n"} {
+	for _, bad := range []string{
+		shellBlockEnd + "\n",
+		shellBlockBegin + "\n",
+		shellBlockBegin + "\n" + shellBlockBegin + "\n" + shellBlockEnd + "\n",
+	} {
 		if _, err := withoutShellBlock(bad, "rc"); err == nil {
 			t.Fatalf("accepted broken marker: %q", bad)
 		}
@@ -68,6 +84,7 @@ func TestManagedShellMarkersPreserveBytes(t *testing.T) {
 		t.Fatal("managed block not idempotent")
 	}
 }
+
 func TestShellInspectionNeverExpandsExecutableSources(t *testing.T) {
 	input := `source "$HOME/.tool config"
 . ${XDG_CONFIG_HOME}/extra
@@ -84,6 +101,7 @@ source /tmp/*.sh
 		t.Fatalf("got %v, want %v", got, want)
 	}
 }
+
 func TestShellSourceIntrospectionPreservesToolAndPrompt(t *testing.T) {
 	home := t.TempDir()
 	child := filepath.Join(home, "child.zsh")
@@ -109,6 +127,7 @@ func TestShellSourceIntrospectionPreservesToolAndPrompt(t *testing.T) {
 		}
 	}
 }
+
 func TestGeneratedShellIntegrationOrderAndCollisionRules(t *testing.T) {
 	recognized := map[string][]string{}
 	for _, shell := range []string{"bash", "zsh", "fish"} {
@@ -116,7 +135,13 @@ func TestGeneratedShellIntegrationOrderAndCollisionRules(t *testing.T) {
 		if shell == "fish" {
 			body = fishShellBody(recognized)
 		}
-		for _, required := range []string{"code --wait", "KIND_EXPERIMENTAL_PROVIDER", "GOTOOLCHAIN=local", "--no-cmd", "__cachyos_tooling_mise_initialized"} {
+		for _, required := range []string{
+			"code --wait",
+			"KIND_EXPERIMENTAL_PROVIDER",
+			"GOTOOLCHAIN=local",
+			"--no-cmd",
+			"__cachyos_tooling_mise_initialized",
+		} {
 			if !strings.Contains(body, required) {
 				t.Fatalf("%s missing %s", shell, required)
 			}
@@ -129,6 +154,7 @@ func TestGeneratedShellIntegrationOrderAndCollisionRules(t *testing.T) {
 		}
 	}
 }
+
 func TestShellValidationFailureWritesNothing(t *testing.T) {
 	integrationParserFiles(t)
 	runner := &integrationRunner{rejectSession: true}
@@ -148,6 +174,7 @@ func TestShellValidationFailureWritesNothing(t *testing.T) {
 		t.Fatal("wrote session defaults before parser checks")
 	}
 }
+
 func TestShellConfigurationKeepsExistingDefaultsAndPrompt(t *testing.T) {
 	integrationParserFiles(t)
 	runner := &integrationRunner{}
@@ -192,13 +219,20 @@ func TestShellConfigurationKeepsExistingDefaultsAndPrompt(t *testing.T) {
 		t.Fatal("shell config changed on repeated invocation")
 	}
 }
+
 func TestComposeProviderEditOnlyChangesProvider(t *testing.T) {
 	cases := []struct{ input, unchanged string }{
-		{"# personal\n[engine]\nevents_logger = \"file\"\ncompose_providers = [\n \"/custom/compose\", # old\n] # selection\n[network]\ndefault_network=\"custom\"\n", "[network]\ndefault_network=\"custom\"\n"},
+		{
+			"# personal\n[engine]\nevents_logger = \"file\"\ncompose_providers = [\n \"/custom/compose\", # old\n] # selection\n[network]\ndefault_network=\"custom\"\n",
+			"[network]\ndefault_network=\"custom\"\n",
+		},
 		{"[engine]\nevents_logger=\"file\"\n", "events_logger=\"file\"\n"},
 		{"[network]\nnetwork_backend=\"netavark\"\n", "[network]\nnetwork_backend=\"netavark\"\n"},
 		{"[engine]\r\ncompose_providers=['docker-compose']\r\nfoo=true\r\n", "foo=true\r\n"},
-		{"[[additional]]\nname='first'\n[[additional]]\nname='second'\n", "[[additional]]\nname='first'\n[[additional]]\nname='second'\n"},
+		{
+			"[[additional]]\nname='first'\n[[additional]]\nname='second'\n",
+			"[[additional]]\nname='first'\n[[additional]]\nname='second'\n",
+		},
 	}
 	for _, tc := range cases {
 		result, err := selectComposeProvider(tc.input)
@@ -218,6 +252,7 @@ func TestComposeProviderEditOnlyChangesProvider(t *testing.T) {
 		}
 	}
 }
+
 func TestComposeRejectsUnsafeOrAmbiguousTOML(t *testing.T) {
 	for _, input := range []string{
 		"[engine]\ncompose_providers=[\"one\"]\ncompose_providers=[\"two\"]\n",
@@ -237,6 +272,7 @@ func TestComposeRejectsUnsafeOrAmbiguousTOML(t *testing.T) {
 		}
 	}
 }
+
 func TestComposeKeepsArrayAppendModeExplicitlyDisabled(t *testing.T) {
 	single, err := scanComposeConfig("[engine]\ncompose_providers=[\"" + composeProvider + "\"]\n")
 	if err != nil {
@@ -256,6 +292,7 @@ func TestComposeKeepsArrayAppendModeExplicitlyDisabled(t *testing.T) {
 		t.Fatal("persistent append mode not reset")
 	}
 }
+
 func TestSubordinateMappingsRequireContiguousNonoverlappingRange(t *testing.T) {
 	for _, tc := range []struct {
 		text           string
@@ -274,6 +311,7 @@ func TestSubordinateMappingsRequireContiguousNonoverlappingRange(t *testing.T) {
 		}
 	}
 }
+
 func TestContainerSetupNeverStartsWorkloadsAndSocketIsOptIn(t *testing.T) {
 	runner := &integrationRunner{}
 	c := integrationContext(t, runner)
@@ -303,6 +341,7 @@ func TestContainerSetupNeverStartsWorkloadsAndSocketIsOptIn(t *testing.T) {
 		t.Fatal("explicit socket opt-in not applied")
 	}
 }
+
 func TestContainerCheckDoesNotWriteConfigurationOrReport(t *testing.T) {
 	runner := &integrationRunner{}
 	c := integrationContext(t, runner)
@@ -317,10 +356,16 @@ func TestContainerCheckDoesNotWriteConfigurationOrReport(t *testing.T) {
 		}
 	}
 }
+
 func TestLaterComposeOverridesAndParseErrorsAreReported(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "90-myarch-buildkit.conf")
-	files := map[string]string{"80-early.conf": "[engine]\ncompose_providers=['docker-compose']\n", "91-custom.conf": "[engine]\ncompose_providers=['custom']\n", "92-same.conf": "[engine]\ncompose_providers=['" + composeProvider + "']\n", "99-broken.conf": "[engine]\ncompose_providers=[\n"}
+	files := map[string]string{
+		"80-early.conf":  "[engine]\ncompose_providers=['docker-compose']\n",
+		"91-custom.conf": "[engine]\ncompose_providers=['custom']\n",
+		"92-same.conf":   "[engine]\ncompose_providers=['" + composeProvider + "']\n",
+		"99-broken.conf": "[engine]\ncompose_providers=[\n",
+	}
 	for name, text := range files {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(text), 0600); err != nil {
 			t.Fatal(err)

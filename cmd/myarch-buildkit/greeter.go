@@ -13,10 +13,12 @@ import (
 	"syscall"
 )
 
-var greeterVersionPattern = regexp.MustCompile(`\bv?(\d+)\.(\d+)\.(\d+)\b`)
 var greeterDevicePattern = regexp.MustCompile(`^[a-z0-9_-]+$`)
+
 var greeterLayoutPattern = regexp.MustCompile(`^[A-Za-z0-9_,-]+$`)
+
 var displayManagerPattern = regexp.MustCompile(`^[A-Za-z0-9_.@:-]+\.service$`)
+
 var greeterErrorPattern = regexp.MustCompile(`(?i)config error|parse error`)
 
 func GreeterConfigText(binary, compositor, config string) (string, error) {
@@ -27,6 +29,7 @@ func GreeterConfigText(binary, compositor, config string) (string, error) {
 	encoded, _ := json.Marshal(command)
 	return "# Managed by myarch-buildkit. Password login; no automatic login.\n[terminal]\nvt = 1\n\n[default_session]\nuser = \"greeter\"\ncommand = " + string(encoded) + "\n", nil
 }
+
 func GreeterKeyboardText(kind string, roles map[string][]string, observed map[string]bool, layout string) (string, error) {
 	if !greeterLayoutPattern.MatchString(layout) {
 		return "", fmt.Errorf("unsupported internal keyboard layout")
@@ -60,23 +63,22 @@ func GreeterKeyboardText(kind string, roles map[string][]string, observed map[st
 	}
 	return strings.Join(lines, "\n") + "\n", nil
 }
+
 func GreetdExecMatches(text string) bool {
 	pattern := regexp.MustCompile(`(?:\{|;)\s*path=([^ ;}]+)`)
 	matches := pattern.FindAllStringSubmatch(text, -1)
 	return len(matches) == 1 && (matches[0][1] == "/usr/bin/greetd" || matches[0][1] == "greetd")
 }
+
 func greeterStageKeyboard(c *Context, staging, binary string, record map[string]any) (string, string, error) {
-	version := greeterVersionPattern.FindStringSubmatch(str(c.Inventory["hyprland_version"]))
 	main := str(c.Inventory["active_config"])
-	kind, destination := "", ""
-	if len(version) == 4 && version[1] == "0" && (version[2] == "55" || version[2] == "56") && filepath.Ext(main) == ".lua" {
-		kind = "lua"
+	kind, err := hyprlandConfigFormat(main)
+	if err != nil {
+		return "", "", err
+	}
+	destination := "/etc/greetd/hyprland.conf"
+	if kind == "lua" {
 		destination = "/etc/greetd/hypr.lua"
-	} else if len(version) == 4 && version[1] == "0" && version[2] == "54" && filepath.Ext(main) == ".conf" {
-		kind = "hyprlang"
-		destination = "/etc/greetd/hyprland.conf"
-	} else {
-		return "", "", fmt.Errorf("Hyprland version/config format is unverified for the greeter")
 	}
 	roles, err := KeyboardRoles(c)
 	if err != nil {
@@ -115,13 +117,26 @@ func greeterStageKeyboard(c *Context, staging, binary string, record map[string]
 	if result.Code != 0 || greeterErrorPattern.MatchString(result.Stdout+result.Stderr) {
 		return "", "", fmt.Errorf("greeter keyboard configuration failed Hyprland validation: %s", strings.TrimSpace(result.Stdout+result.Stderr))
 	}
-	record["keyboard"] = map[string]any{"config": destination, "format": kind, "default": layout, "external_overrides": false, "native_config_verified": true}
+	record["keyboard"] = map[string]any{
+		"config":                 destination,
+		"format":                 kind,
+		"default":                layout,
+		"external_overrides":     false,
+		"native_config_verified": true,
+	}
 	return staged, destination, nil
 }
 
 // ConfigureGreeter prepares password login for the next boot and never restarts a session.
 func ConfigureGreeter(c *Context) (err error) {
-	record := map[string]any{"status": "checking", "autologin": false, "host_compositor": "Hyprland", "current_session_restarted": false, "appearance": "Packaged defaults; no appearance snapshot copied.", "verification": "Static preflight only; next-boot password login must be tested."}
+	record := map[string]any{
+		"status":                    "checking",
+		"autologin":                 false,
+		"host_compositor":           "Hyprland",
+		"current_session_restarted": false,
+		"appearance":                "Packaged defaults; no appearance snapshot copied.",
+		"verification":              "Static preflight only; next-boot password login must be tested.",
+	}
 	c.Report["greeter"] = record
 	defer func() {
 		if err != nil {
@@ -303,6 +318,7 @@ func greeterBootPath(root string, uid int, runID string) (string, error) {
 	path, _, err := rootJournalPaths(root, uid, runID, "greeter-boot")
 	return path, err
 }
+
 func saveGreeterBoot(path string, j greeterBootJournal) error {
 	data, err := json.MarshalIndent(j, "", "  ")
 	if err != nil {
@@ -310,6 +326,7 @@ func saveGreeterBoot(path string, j greeterBootJournal) error {
 	}
 	return rootAtomic(path, append(data, '\n'), 0600, 0, 0)
 }
+
 func privilegedGreeterBoot(root string, uid int, p systemPayload) (greeterBootJournal, error) {
 	var j greeterBootJournal
 	if root != "" {
@@ -394,6 +411,7 @@ func privilegedGreeterBoot(root string, uid int, p systemPayload) (greeterBootJo
 	j.Completed = true
 	return j, saveGreeterBoot(path, j)
 }
+
 func privilegedGreeterRestore(root string, uid int, p systemPayload) error {
 	if root != "" {
 		return fmt.Errorf("boot transitions require the actual system")
@@ -457,6 +475,7 @@ func privilegedGreeterRestore(root string, uid int, p systemPayload) error {
 	j.Restored = true
 	return saveGreeterBoot(path, j)
 }
+
 func RestoreGreeter(c *Context) error {
 	record := object(c.Report["greeter"])
 	if record["root_boot_journal"] != true || record["boot_transition_restored"] == true {

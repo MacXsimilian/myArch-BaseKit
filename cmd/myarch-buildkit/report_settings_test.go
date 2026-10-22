@@ -22,7 +22,13 @@ func saveSettingsDocument(t *testing.T, value any) string {
 }
 
 func settingsReportEnvelope(settings any) map[string]any {
-	return map[string]any{"format": RunReportFormat, "schema_version": RunReportSchemaVersion, "settings": settings, "stages": map[string]any{"defaults": map[string]any{"status": "completed"}}, "status": "partial"}
+	return map[string]any{
+		"format":         RunReportFormat,
+		"schema_version": RunReportSchemaVersion,
+		"settings":       settings,
+		"stages":         map[string]any{"defaults": map[string]any{"status": "completed"}},
+		"status":         "partial",
+	}
 }
 
 func settingsSnapshotObject(t *testing.T) map[string]any {
@@ -83,7 +89,18 @@ func TestSettingsRejectUnknownRunReportEnvelope(t *testing.T) {
 }
 
 func TestSettingsRejectIncompleteEffectiveSnapshot(t *testing.T) {
-	for _, path := range [][]string{{"schema_version"}, {"package_groups"}, {"laptop"}, {"package_groups", "core"}, {"package_groups", "utilities"}, {"package_groups", "development"}, {"package_groups", "containers"}, {"laptop", "internal_scale"}, {"laptop", "internal_keyboard"}, {"laptop", "natural_scroll"}} {
+	for _, path := range [][]string{
+		{"schema_version"},
+		{"package_groups"},
+		{"laptop"},
+		{"package_groups", "core"},
+		{"package_groups", "utilities"},
+		{"package_groups", "development"},
+		{"package_groups", "containers"},
+		{"laptop", "internal_scale"},
+		{"laptop", "internal_keyboard"},
+		{"laptop", "natural_scroll"},
+	} {
 		snapshot := settingsSnapshotObject(t)
 		if len(path) == 1 {
 			delete(snapshot, path[0])

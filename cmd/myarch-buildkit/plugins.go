@@ -5,37 +5,52 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
-type Plugin struct{ ID, Repo, Commit, Subdir string }
-
-var RequestedPlugins = []Plugin{
-	{"dockerManager", "LuckShiba/DmsDockerManager", "f6f7d94c84510da098980a2bb733137e90f98fd8", ""},
-	{"kubernetes", "psyreactor/dms-kubernetes", "0c39d9a28bb2ea592f7a306021dffaabbf2723ca", ""},
-	{"emojiLauncher", "devnullvoid/dms-emoji-launcher", "8ff394e3ddfcb2fd755ed2e7b4c6f01f3e26e596", ""},
-	{"bongoCat", "hthienloc/dms-plugins", "30841c817c152bda1c969e0b91d034ccc9a75b86", "bongoCat"},
-	{"clipboardPlus", "Dadangdut33/dms-plugins", "63fe6b87c497f1f7c2ea61432716817db1c5c3a4", "ClipboardPlus"},
+type Plugin struct {
+	ID     string
+	Repo   string
+	Subdir string
 }
 
-func FetchPlugin(c *Context, p Plugin) (string, error) {
+var RequestedPlugins = []Plugin{
+	{ID: "dockerManager", Repo: "LuckShiba/DmsDockerManager", Subdir: ""},
+	{ID: "kubernetes", Repo: "psyreactor/dms-kubernetes", Subdir: ""},
+	{ID: "emojiLauncher", Repo: "devnullvoid/dms-emoji-launcher", Subdir: ""},
+	{ID: "bongoCat", Repo: "hthienloc/dms-plugins", Subdir: "bongoCat"},
+	{ID: "clipboardPlus", Repo: "Dadangdut33/dms-plugins", Subdir: "ClipboardPlus"},
+}
+
+// Fetch the current default branch and retain the resolved commit.
+// Checkout data is never read from an existing (possibly edited) working tree.
+func FetchPlugin(c *Context, p Plugin) (string, string, error) {
 	destination := filepath.Join(c.RunDir, "plugin-downloads", p.ID)
-	if !exists(destination) {
-		for _, args := range [][]string{{"git", "init", destination}, {"git", "-C", destination, "fetch", "--depth", "1", "https://github.com/" + p.Repo, p.Commit}, {"git", "-C", destination, "checkout", "--detach", "FETCH_HEAD"}} {
-			if _, err := c.Run(args...); err != nil {
-				return "", err
-			}
+	if err := securePath(destination, true); err != nil {
+		return "", "", err
+	}
+	for _, args := range [][]string{
+		{"git", "init", destination},
+		{"git", "-C", destination, "fetch", "--depth", "1", "https://github.com/" + p.Repo, "HEAD"},
+		{"git", "-C", destination, "checkout", "--detach", "--force", "FETCH_HEAD"},
+		{"git", "-C", destination, "clean", "-fdx"},
+	} {
+		if _, err := c.Run(args...); err != nil {
+			return "", "", err
 		}
 	}
 	revision, err := c.Run("git", "-C", destination, "rev-parse", "HEAD")
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	if strings.TrimSpace(revision.Stdout) != p.Commit {
-		return "", fmt.Errorf("unexpected plugin revision: %s", p.ID)
+	commit := strings.TrimSpace(revision.Stdout)
+	if !regexp.MustCompile(`^[0-9a-f]{40}$`).MatchString(commit) {
+		return "", "", fmt.Errorf("invalid upstream plugin revision: %s", p.ID)
 	}
-	return filepath.Join(destination, p.Subdir), nil
+	return filepath.Join(destination, p.Subdir), commit, nil
 }
+
 func PluginManifest(root, expectedID string) (map[string]any, error) {
 	raw, err := os.ReadFile(filepath.Join(root, "plugin.json"))
 	if err != nil {
@@ -67,8 +82,60 @@ func PluginManifest(root, expectedID string) (map[string]any, error) {
 	}
 	return manifest, nil
 }
-func ConfigurePlugins(c *Context) error {
-	root := filepath.Join(c.ConfigHome, "DankMaterialShell/plugins")
+
+type pluginSnapshot struct {
+	Destination string            `json:"destination"`
+	Files       map[string]string `json:"files"`
+}
+
+func pluginSnapshotPath(c *Context, id string) string {
+	return filepath.Join(stateRoot(c), "plugin-snapshots", id+".json")
+}
+
+// Only previously managed files can be removed. Unknown files may be plugin
+// user data; a first upgrade must not assume every file is disposable code.
+func stageObsoletePluginFiles(c *Context, plugin Plugin, destination string, files map[string]string) error {
+	path := pluginSnapshotPath(c, plugin.ID)
+	previous := pluginSnapshot{}
+	if exists(path) {
+		if err := ReadJSON(path, &previous); err != nil {
+			return err
+		}
+	}
+	if previous.Destination == destination {
+		for relative, expected := range previous.Files {
+			target := filepath.Join(destination, relative)
+			if filepath.IsAbs(relative) || filepath.Clean(relative) != relative || relative == "." || !inside(destination, target) || strings.Split(relative, string(os.PathSeparator))[0] == ".git" {
+				return fmt.Errorf("unsafe plugin snapshot path: %s", relative)
+			}
+			if _, present := files[relative]; present {
+				continue
+			}
+			actual, err := FileHash(target)
+			if err != nil {
+				return err
+			}
+			if actual == "" {
+				continue
+			}
+			if actual != expected {
+				c.Warn("Preserved locally changed obsolete plugin file: " + target)
+				continue
+			}
+			if err := c.stageDelete(target); err != nil {
+				return err
+			}
+		}
+	}
+	data, err := jsonBytes(pluginSnapshot{Destination: destination, Files: files})
+	if err != nil {
+		return err
+	}
+	return c.Write(path, data, 0600)
+}
+
+// installedPluginDirectories prefers user copies over system-wide plugins.
+func installedPluginDirectories(root string) (map[string]string, error) {
 	existing := map[string]string{}
 	for _, directory := range []string{root, "/etc/xdg/quickshell/dms-plugins"} {
 		entries, err := os.ReadDir(directory)
@@ -76,7 +143,7 @@ func ConfigurePlugins(c *Context) error {
 			continue
 		}
 		if err != nil {
-			return err
+			return nil, err
 		}
 		for _, entry := range entries {
 			path := filepath.Join(directory, entry.Name(), "plugin.json")
@@ -85,11 +152,11 @@ func ConfigurePlugins(c *Context) error {
 			}
 			raw, e := os.ReadFile(path)
 			if e != nil {
-				return e
+				return nil, e
 			}
 			var manifest map[string]any
 			if e = json.Unmarshal(raw, &manifest); e != nil {
-				return e
+				return nil, e
 			}
 			id, _ := manifest["id"].(string)
 			if _, ok := existing[id]; !ok {
@@ -97,71 +164,58 @@ func ConfigurePlugins(c *Context) error {
 			}
 		}
 	}
-	records := []map[string]any{}
-	for _, plugin := range RequestedPlugins {
-		if installed, ok := existing[plugin.ID]; ok {
-			manifest, err := PluginManifest(installed, plugin.ID)
-			if err != nil {
-				return err
-			}
-			records = append(records, map[string]any{"id": plugin.ID, "status": "existing installation preserved", "version": manifest["version"]})
-			continue
+	return existing, nil
+}
+
+// stagePluginSnapshot copies regular files and records hashes for future cleanup.
+// Git metadata is excluded, and symlinks never enter the pending payload.
+func stagePluginSnapshot(c *Context, source, destination string) (map[string]string, error) {
+	newFiles := map[string]string{}
+	err := filepath.WalkDir(source, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
 		}
-		destination := filepath.Join(root, plugin.ID)
-		if _, err := os.Lstat(destination); err == nil {
-			return fmt.Errorf("unrecognized plugin directory preserved: %s", destination)
-		} else if !os.IsNotExist(err) {
-			return err
+		relative, e := filepath.Rel(source, path)
+		if e != nil {
+			return e
 		}
-		source, err := FetchPlugin(c, plugin)
-		if err != nil {
-			return err
-		}
-		manifest, err := PluginManifest(source, plugin.ID)
-		if err != nil {
-			return err
-		}
-		err = filepath.WalkDir(source, func(path string, entry os.DirEntry, walkErr error) error {
-			if walkErr != nil {
-				return walkErr
-			}
-			relative, e := filepath.Rel(source, path)
-			if e != nil {
-				return e
-			}
-			for _, part := range strings.Split(relative, string(os.PathSeparator)) {
-				if part == ".git" {
-					if entry.IsDir() {
-						return filepath.SkipDir
-					}
-					return nil
+		for _, part := range strings.Split(relative, string(os.PathSeparator)) {
+			if part == ".git" {
+				if entry.IsDir() {
+					return filepath.SkipDir
 				}
-			}
-			if entry.Type()&os.ModeSymlink != 0 {
-				return fmt.Errorf("plugin snapshot contains a symlink: %s", relative)
-			}
-			if entry.IsDir() {
 				return nil
 			}
-			info, e := entry.Info()
-			if e != nil {
-				return e
-			}
-			if !info.Mode().IsRegular() {
-				return fmt.Errorf("plugin snapshot contains a nonregular file: %s", relative)
-			}
-			raw, e := os.ReadFile(path)
-			if e != nil {
-				return e
-			}
-			return c.Write(filepath.Join(destination, relative), raw, info.Mode().Perm()&0755)
-		})
-		if err != nil {
-			return err
 		}
-		records = append(records, map[string]any{"id": plugin.ID, "status": "staged snapshot", "repo": "https://github.com/" + plugin.Repo, "commit": plugin.Commit, "version": manifest["version"]})
+		if entry.Type()&os.ModeSymlink != 0 {
+			return fmt.Errorf("plugin snapshot contains a symlink: %s", relative)
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		info, e := entry.Info()
+		if e != nil {
+			return e
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("plugin snapshot contains a nonregular file: %s", relative)
+		}
+		raw, e := os.ReadFile(path)
+		if e != nil {
+			return e
+		}
+		newFiles[relative] = hashBytes(raw)
+		return c.Write(filepath.Join(destination, relative), raw, info.Mode().Perm()&0755)
+	})
+	if err != nil {
+		return nil, err
 	}
-	path := filepath.Join(c.ConfigHome, "DankMaterialShell/plugin_settings.json")
+	return newFiles, nil
+}
+
+// configurePluginPreferences retains personal values and stages only our overrides.
+func configurePluginPreferences(c *Context) error {
+	path := filepath.Join(c.ConfigHome, dmsDirectory(c), "plugin_settings.json")
 	settings, err := desktopReadObject(c.View(path), nil)
 	if err != nil {
 		return err
@@ -197,8 +251,69 @@ func ConfigurePlugins(c *Context) error {
 	if err = c.OverrideJSON(path, updates); err != nil {
 		return err
 	}
+	return nil
+}
+
+func ConfigurePlugins(c *Context) error {
+	if c.CheckOnly || c.Pending == nil {
+		return fmt.Errorf("plugin updates require staging")
+	}
+	root := filepath.Join(c.ConfigHome, dmsDirectory(c), "plugins")
+	existing, err := installedPluginDirectories(root)
+	if err != nil {
+		return err
+	}
+	records := []map[string]any{}
+	for _, plugin := range RequestedPlugins {
+		destination := filepath.Join(root, plugin.ID)
+		installed, updating := existing[plugin.ID]
+		if updating {
+			if _, err := PluginManifest(installed, plugin.ID); err != nil {
+				return err
+			}
+			// User copies override system plugins; never modify package-owned files.
+			if inside(root, installed) {
+				destination = installed
+			}
+		}
+		if !updating || destination != installed {
+			if _, err := os.Lstat(destination); err == nil {
+				return fmt.Errorf("unrecognized plugin directory preserved: %s", destination)
+			} else if !os.IsNotExist(err) {
+				return err
+			}
+		}
+		source, commit, err := FetchPlugin(c, plugin)
+		if err != nil {
+			return err
+		}
+		manifest, err := PluginManifest(source, plugin.ID)
+		if err != nil {
+			return err
+		}
+		newFiles, err := stagePluginSnapshot(c, source, destination)
+		if err != nil {
+			return err
+		}
+		if err := stageObsoletePluginFiles(c, plugin, destination, newFiles); err != nil {
+			return err
+		}
+		records = append(records, map[string]any{
+			"id":          plugin.ID,
+			"status":      "staged latest snapshot",
+			"repo":        "https://github.com/" + plugin.Repo,
+			"ref":         "HEAD",
+			"commit":      commit,
+			"version":     manifest["version"],
+			"updated":     updating,
+			"destination": destination,
+		})
+	}
+	if err := configurePluginPreferences(c); err != nil {
+		return err
+	}
 	c.Report["plugins"] = records
-	c.Note("Five DMS plugins are staged for next login; existing plugin installations are preserved.")
+	c.Note("Five DMS plugins are staged for next login; latest upstream plugin code will replace existing copies with backups; preferences are preserved.")
 	c.Note("Bongo Cat needs input-group membership to react to typing. See the guide for its explicit permission step.")
 	return nil
 }

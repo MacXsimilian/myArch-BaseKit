@@ -18,9 +18,16 @@ func captureCLIOutput(t *testing.T, fn func()) string {
 	}
 	previous := os.Stdout
 	os.Stdout = writer
-	defer func() { os.Stdout = previous; reader.Close(); writer.Close() }()
+	defer func() {
+		os.Stdout = previous
+		reader.Close()
+		writer.Close()
+	}()
 	output := make(chan []byte, 1)
-	go func() { data, _ := io.ReadAll(reader); output <- data }()
+	go func() {
+		data, _ := io.ReadAll(reader)
+		output <- data
+	}()
 	fn()
 	writer.Close()
 	os.Stdout = previous
@@ -28,12 +35,27 @@ func captureCLIOutput(t *testing.T, fn func()) string {
 }
 
 func TestCheckOutputOptionsAndCancellationStayScoped(t *testing.T) {
-	for _, args := range [][]string{{"check", "--json"}, {"--check", "--json"}, {"check", "--details"}, {"--cancel-pending", "laptop"}, {"--cancel-pending", "desktop"}} {
+	for _, args := range [][]string{
+		{"check", "--json"},
+		{"--check", "--json"},
+		{"check", "--details"},
+		{"--cancel-pending", "laptop"},
+		{"--cancel-pending", "desktop"},
+	} {
 		if _, err := ParseOptions(args); err != nil {
 			t.Fatalf("%v: %v", args, err)
 		}
 	}
-	for _, args := range [][]string{{"plan", "--json"}, {"apply", "--json"}, {"check", "--json", "--details"}, {"--cancel-pending", "shell"}, {"apply", "--cancel-pending", "laptop"}, {"--cancel-pending", "laptop", "--stage", "verify"}, {"--cancel-pending", "desktop", "--restore-profile", "/tmp/run"}, {"check", "--cancel-pending", "laptop"}} {
+	for _, args := range [][]string{
+		{"plan", "--json"},
+		{"apply", "--json"},
+		{"check", "--json", "--details"},
+		{"--cancel-pending", "shell"},
+		{"apply", "--cancel-pending", "laptop"},
+		{"--cancel-pending", "laptop", "--stage", "verify"},
+		{"--cancel-pending", "desktop", "--restore-profile", "/tmp/run"},
+		{"check", "--cancel-pending", "laptop"},
+	} {
 		if _, err := ParseOptions(args); err == nil {
 			t.Fatalf("accepted %v", args)
 		}

@@ -21,10 +21,39 @@ func TestPlanRespectsSelectedStages(t *testing.T) {
 		stages          []string
 		present, absent []string
 	}{
-		{[]string{"shell"}, []string{"Shell", "Starship"}, []string{"Packages\n", "At your next myarch-buildkit login", "Plugins", "Login screen", "Cleanup"}},
-		{[]string{"packages"}, []string{"Packages", "selected requirements"}, []string{"Plugins", "Internal display", "Login screen", "App defaults", "sudo usermod", "--stage verify --stage cleanup"}},
-		{[]string{"cleanup"}, []string{"Cleanup", "after checks pass"}, []string{"At your next myarch-buildkit login", "Plugins", "sudo usermod", "./myarch-buildkit check", "--stage verify --stage cleanup"}},
-		{[]string{"laptop"}, []string{"Internal display", "first laptop setup", "./myarch-buildkit check"}, []string{"Plugins", "Docker Manager", "Login screen", "sudo usermod", "--stage verify --stage cleanup"}},
+		{
+			[]string{"shell"},
+			[]string{"Shell", "Starship"},
+			[]string{"Packages\n", "At your next myarch-buildkit login", "Plugins", "Login screen", "Cleanup"},
+		},
+		{
+			[]string{"packages"},
+			[]string{"Packages", "selected requirements"},
+			[]string{
+				"Plugins",
+				"Internal display",
+				"Login screen",
+				"App defaults",
+				"sudo usermod",
+				"--stage verify --stage cleanup",
+			},
+		},
+		{
+			[]string{"cleanup"},
+			[]string{"Cleanup", "after checks pass"},
+			[]string{
+				"At your next myarch-buildkit login",
+				"Plugins",
+				"sudo usermod",
+				"./myarch-buildkit check",
+				"--stage verify --stage cleanup",
+			},
+		},
+		{
+			[]string{"laptop"},
+			[]string{"Internal display", "first laptop setup", "./myarch-buildkit check"},
+			[]string{"Plugins", "Docker Manager", "Login screen", "sudo usermod", "--stage verify --stage cleanup"},
+		},
 	}
 	for _, c := range cases {
 		t.Run(strings.Join(c.stages, ","), func(t *testing.T) {
@@ -45,7 +74,7 @@ func TestPlanRespectsSelectedStages(t *testing.T) {
 
 func TestPlanEffectivePreferencesAndExplicitOptions(t *testing.T) {
 	s := DefaultSettings()
-	s.Laptop = LaptopSettings{"3/2", "de", false}
+	s.Laptop = LaptopSettings{InternalScale: "3/2", InternalKeyboard: "de", NaturalScroll: false}
 	o := Options{Command: "plan", EnablePodmanSocket: true, KeepTerminal: true, RemoveNotes: []string{"gnote"}}
 	text := previewForTest(t, o, s)
 	for _, expected := range []string{"3/2 scale", "de; verified", "Off for pointers", "Enable your user socket", "Alacritty", "gnote"} {
@@ -191,7 +220,19 @@ func TestPlanDisabledGroupsAndConfigurationOnly(t *testing.T) {
 }
 
 func TestPlanFollowupCommandsRetainOnlyRelevantFlags(t *testing.T) {
-	o := Options{Command: "plan", All: true, Details: true, Stages: []string{"desktop"}, ConfigureOnly: true, SettingsPath: "/home/user/my settings.json", PackageGroup: "development", LaptopScale: "3/2", EnablePodmanSocket: true, KeepTerminal: true, RemoveNotes: []string{"gnote", "xpad"}}
+	o := Options{
+		Command:            "plan",
+		All:                true,
+		Details:            true,
+		Stages:             []string{"desktop"},
+		ConfigureOnly:      true,
+		SettingsPath:       "/home/user/my settings.json",
+		PackageGroup:       "development",
+		LaptopScale:        "3/2",
+		EnablePodmanSocket: true,
+		KeepTerminal:       true,
+		RemoveNotes:        []string{"gnote", "xpad"},
+	}
 	if got, want := planFollowupCommand(o, false), "./myarch-buildkit check --settings '/home/user/my settings.json'"; got != want {
 		t.Errorf("check command\n got: %s\nwant: %s", got, want)
 	}
@@ -201,7 +242,20 @@ func TestPlanFollowupCommandsRetainOnlyRelevantFlags(t *testing.T) {
 	if _, err := ParseOptions([]string{"check", "--settings", o.SettingsPath}); err != nil {
 		t.Fatalf("check follow-up cannot run: %v", err)
 	}
-	if _, err := ParseOptions([]string{"apply", "--stage", "verify", "--stage", "cleanup", "--settings", o.SettingsPath, "--keep-terminal", "--remove-notes", "gnote", "--remove-notes", "xpad"}); err != nil {
+	if _, err := ParseOptions([]string{
+		"apply",
+		"--stage",
+		"verify",
+		"--stage",
+		"cleanup",
+		"--settings",
+		o.SettingsPath,
+		"--keep-terminal",
+		"--remove-notes",
+		"gnote",
+		"--remove-notes",
+		"xpad",
+	}); err != nil {
 		t.Fatalf("cleanup follow-up cannot run: %v", err)
 	}
 }
@@ -218,7 +272,12 @@ func TestPlanPackageGroupDoesNotHideConfigurationStages(t *testing.T) {
 }
 
 func TestPlanCommandRetainsFlagsAndQuotedPaths(t *testing.T) {
-	o := Options{Command: "plan", Stages: []string{"desktop"}, SettingsPath: "/home/user/my settings.json", LaptopScale: "3/2"}
+	o := Options{
+		Command:      "plan",
+		Stages:       []string{"desktop"},
+		SettingsPath: "/home/user/my settings.json",
+		LaptopScale:  "3/2",
+	}
 	command := planCommand(o, "apply", false)
 	for _, value := range []string{"--stage desktop", "--settings '/home/user/my settings.json'", "--laptop-scale 3/2"} {
 		if !strings.Contains(command, value) {

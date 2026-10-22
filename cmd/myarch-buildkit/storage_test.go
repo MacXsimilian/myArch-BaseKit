@@ -39,11 +39,23 @@ func (r *storageRunner) Execute(cmd Command) (CommandResult, error) {
 	}
 	return CommandResult{Stdout: out}, nil
 }
+
 func storageContext(t *testing.T) (*Context, *storageRunner) {
 	t.Helper()
 	home := t.TempDir()
 	runner := &storageRunner{}
-	ctx := &Context{Home: home, ConfigHome: filepath.Join(home, ".config"), StateHome: filepath.Join(home, ".state"), DataHome: filepath.Join(home, ".data"), CacheHome: filepath.Join(home, ".cache"), BinDir: filepath.Join(home, ".local", "bin"), RunDir: filepath.Join(home, "run"), Runner: runner, Report: map[string]any{"schema_version": 1}, Inventory: map[string]any{"hyprland_binary": "/usr/bin/Hyprland"}}
+	ctx := &Context{
+		Home:       home,
+		ConfigHome: filepath.Join(home, ".config"),
+		StateHome:  filepath.Join(home, ".state"),
+		DataHome:   filepath.Join(home, ".data"),
+		CacheHome:  filepath.Join(home, ".cache"),
+		BinDir:     filepath.Join(home, ".local", "bin"),
+		RunDir:     filepath.Join(home, "run"),
+		Runner:     runner,
+		Report:     map[string]any{"schema_version": 1},
+		Inventory:  map[string]any{"hyprland_binary": "/usr/bin/Hyprland"},
+	}
 	ctx.ReportPath = filepath.Join(ctx.RunDir, "profile-report.json")
 	ctx.ensureReport()
 	old := noDesktopProcRoot
@@ -54,12 +66,14 @@ func storageContext(t *testing.T) (*Context, *storageRunner) {
 	t.Cleanup(func() { noDesktopProcRoot = old })
 	return ctx, runner
 }
+
 func storagePut(t *testing.T, path string, data string) {
 	t.Helper()
 	if err := AtomicWrite(path, []byte(data), 0600); err != nil {
 		t.Fatal(err)
 	}
 }
+
 func storageStage(t *testing.T, c *Context, path, data string) {
 	t.Helper()
 	if c.Pending == nil {
@@ -71,12 +85,14 @@ func storageStage(t *testing.T, c *Context, path, data string) {
 		t.Fatal(err)
 	}
 }
+
 func storagePublish(t *testing.T, c *Context) {
 	t.Helper()
 	if err := c.Publish("laptop"); err != nil {
 		t.Fatal(err)
 	}
 }
+
 func storageRead(t *testing.T, path string) string {
 	t.Helper()
 	data, err := os.ReadFile(path)
@@ -85,6 +101,7 @@ func storageRead(t *testing.T, path string) string {
 	}
 	return string(data)
 }
+
 func storageRequireError(t *testing.T, err error, part string) {
 	t.Helper()
 	if err == nil || !strings.Contains(strings.ToLower(err.Error()), strings.ToLower(part)) {
@@ -104,6 +121,7 @@ func TestStorageStagingLeavesWatchedFilesUntouched(t *testing.T) {
 		t.Fatal("staging wrote active files or created active backups")
 	}
 }
+
 func TestStorageJSONPreservesUnrelatedRuntimeProperties(t *testing.T) {
 	c, _ := storageContext(t)
 	path := filepath.Join(c.ConfigHome, "DankMaterialShell", "settings.json")
@@ -122,6 +140,7 @@ func TestStorageJSONPreservesUnrelatedRuntimeProperties(t *testing.T) {
 		t.Fatal(value)
 	}
 }
+
 func TestStorageUnchangedJSONStillAllowsRuntimeChanges(t *testing.T) {
 	c, _ := storageContext(t)
 	path := filepath.Join(c.ConfigHome, "DankMaterialShell", "settings.json")
@@ -136,6 +155,7 @@ func TestStorageUnchangedJSONStillAllowsRuntimeChanges(t *testing.T) {
 		t.Fatal("runtime property lost")
 	}
 }
+
 func TestStorageExplicitEqualJSONSettingAndNestedMerge(t *testing.T) {
 	c, _ := storageContext(t)
 	path := filepath.Join(c.ConfigHome, "DankMaterialShell", "settings.json")
@@ -157,6 +177,7 @@ func TestStorageExplicitEqualJSONSettingAndNestedMerge(t *testing.T) {
 		t.Fatal(value)
 	}
 }
+
 func TestStorageChecksEveryBaselineBeforeWriting(t *testing.T) {
 	c, _ := storageContext(t)
 	a, b := filepath.Join(c.Home, "first"), filepath.Join(c.Home, "second")
@@ -171,6 +192,7 @@ func TestStorageChecksEveryBaselineBeforeWriting(t *testing.T) {
 		t.Fatal("earlier file changed before later conflict check")
 	}
 }
+
 func TestStorageRejectsPayloadTampering(t *testing.T) {
 	c, _ := storageContext(t)
 	path := filepath.Join(c.Home, "file")
@@ -183,6 +205,7 @@ func TestStorageRejectsPayloadTampering(t *testing.T) {
 		t.Fatal("active file changed")
 	}
 }
+
 func TestStorageRejectsPendingSymlinkDestinationAndParent(t *testing.T) {
 	for _, parent := range []bool{false, true} {
 		t.Run(fmt.Sprint(parent), func(t *testing.T) {
@@ -207,6 +230,7 @@ func TestStorageRejectsPendingSymlinkDestinationAndParent(t *testing.T) {
 		})
 	}
 }
+
 func TestStorageOrdinaryDefaultsPreserveSafeSymlinksAndMode(t *testing.T) {
 	c, _ := storageContext(t)
 	path := filepath.Join(c.Home, "actual", "settings")
@@ -237,6 +261,7 @@ func TestStorageOrdinaryDefaultsPreserveSafeSymlinksAndMode(t *testing.T) {
 		t.Fatal("safe symlink target not restored")
 	}
 }
+
 func TestStorageCancellationLeavesDesktopUntouched(t *testing.T) {
 	c, _ := storageContext(t)
 	path := filepath.Join(c.Home, "file")
@@ -254,6 +279,7 @@ func TestStorageCancellationLeavesDesktopUntouched(t *testing.T) {
 		t.Fatal("cancel changed desktop")
 	}
 }
+
 func TestStorageLoginBackupCapturesLatestJSON(t *testing.T) {
 	c, _ := storageContext(t)
 	path := filepath.Join(c.ConfigHome, "DankMaterialShell", "settings.json")
@@ -279,6 +305,7 @@ func TestStorageLoginBackupCapturesLatestJSON(t *testing.T) {
 		t.Fatal("latest original not restored")
 	}
 }
+
 func TestStorageExplicitRestorePreservesLaterEdits(t *testing.T) {
 	c, _ := storageContext(t)
 	path := filepath.Join(c.Home, "file")
@@ -294,6 +321,7 @@ func TestStorageExplicitRestorePreservesLaterEdits(t *testing.T) {
 		t.Fatal("later edits overwritten")
 	}
 }
+
 func TestStorageOwnershipBlocksEditedManagedFile(t *testing.T) {
 	c, _ := storageContext(t)
 	path := filepath.Join(c.ConfigHome, "hypr", "desktop-managed.conf")
@@ -308,6 +336,7 @@ func TestStorageOwnershipBlocksEditedManagedFile(t *testing.T) {
 	storagePut(t, path, "user change")
 	storageRequireError(t, c.checkOwned(path), "edited after setup")
 }
+
 func TestStorageActiveServiceBlocksEveryWrite(t *testing.T) {
 	c, r := storageContext(t)
 	path := filepath.Join(c.Home, "file")
@@ -320,6 +349,7 @@ func TestStorageActiveServiceBlocksEveryWrite(t *testing.T) {
 		t.Fatal("active service allowed file replacement")
 	}
 }
+
 func TestStorageConcurrentDesktopBlocksBeforeServiceCalls(t *testing.T) {
 	c, r := storageContext(t)
 	path := filepath.Join(c.Home, "file")
@@ -335,6 +365,7 @@ func TestStorageConcurrentDesktopBlocksBeforeServiceCalls(t *testing.T) {
 		t.Fatal("desktop guard ran too late")
 	}
 }
+
 func TestStorageDuplicatePhaseIsNotReplaced(t *testing.T) {
 	c, _ := storageContext(t)
 	storageStage(t, c, filepath.Join(c.Home, "file"), "first")
@@ -351,6 +382,7 @@ func TestStorageDuplicatePhaseIsNotReplaced(t *testing.T) {
 		t.Fatal(items, err)
 	}
 }
+
 func storageDesktop(t *testing.T, c *Context) {
 	t.Helper()
 	main := filepath.Join(c.ConfigHome, "hypr", "hyprland.conf")
@@ -369,6 +401,7 @@ func storageDesktop(t *testing.T, c *Context) {
 		t.Fatal(err)
 	}
 }
+
 func TestStorageNativeValidationUsesStagedDependencies(t *testing.T) {
 	c, _ := storageContext(t)
 	storageDesktop(t, c)
@@ -385,6 +418,7 @@ func TestStorageNativeValidationUsesStagedDependencies(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
 func TestStorageNativeDependencyTamperingBlocksAllWrites(t *testing.T) {
 	c, _ := storageContext(t)
 	storageDesktop(t, c)
@@ -395,6 +429,7 @@ func TestStorageNativeDependencyTamperingBlocksAllWrites(t *testing.T) {
 		t.Fatal("validation tampering applied live")
 	}
 }
+
 func TestStorageInvalidNativeConfigAndExtraStartupBlockStaging(t *testing.T) {
 	c, r := storageContext(t)
 	r.failNative = true
@@ -410,6 +445,7 @@ func TestStorageInvalidNativeConfigAndExtraStartupBlockStaging(t *testing.T) {
 	storageStage(t, c, custom, "exec-once = dms run")
 	storageRequireError(t, ValidateDesktop(c), "additional DMS")
 }
+
 func TestStorageLaptopDependencyRequiresDesktopStage(t *testing.T) {
 	c, _ := storageContext(t)
 	storageStage(t, c, filepath.Join(c.Home, "laptop.conf"), "settings")
@@ -417,6 +453,7 @@ func TestStorageLaptopDependencyRequiresDesktopStage(t *testing.T) {
 	storagePublish(t, c)
 	storageRequireError(t, ApplyPending(c), "stage desktop")
 }
+
 func TestStorageInterruptedManifestIsNeverRetried(t *testing.T) {
 	c, _ := storageContext(t)
 	path := filepath.Join(c.Home, "file")
@@ -433,6 +470,7 @@ func TestStorageInterruptedManifestIsNeverRetried(t *testing.T) {
 		t.Fatal("interrupted bundle retried")
 	}
 }
+
 func TestStorageLoginAppliesThenStartsOneDesktop(t *testing.T) {
 	c, r := storageContext(t)
 	storageDesktop(t, c)
@@ -464,6 +502,7 @@ func TestStorageLoginAppliesThenStartsOneDesktop(t *testing.T) {
 		t.Fatal(status)
 	}
 }
+
 func TestStorageFailedLoginDoesNotStartDesktop(t *testing.T) {
 	c, r := storageContext(t)
 	storageDesktop(t, c)
@@ -482,6 +521,7 @@ func TestStorageFailedLoginDoesNotStartDesktop(t *testing.T) {
 		t.Fatal(status)
 	}
 }
+
 func TestStorageRejectsMalformedJSONAndUnsafePermissions(t *testing.T) {
 	c, _ := storageContext(t)
 	path := filepath.Join(c.Home, "bad.json")
@@ -496,6 +536,7 @@ func TestStorageRejectsMalformedJSONAndUnsafePermissions(t *testing.T) {
 	}
 	storageRequireError(t, ReadJSON(path, &value), "writable-by-others")
 }
+
 func TestStorageManifestJSONRemainsCompatible(t *testing.T) {
 	manifest := Manifest{}
 	if err := json.Unmarshal([]byte(`{"version":1,"status":"pending","phase":"laptop","report":"/home/u/run/profile-report.json","files":[{"path":"/home/u/file","source":"/home/u/run/payload","mode":384,"sha256":"x","before_sha256":null}],"validation":{}}`), &manifest); err != nil {
@@ -515,7 +556,12 @@ func TestStorageLegacyDefaultsReportRestoresBackupAndCreatedFile(t *testing.T) {
 	storagePut(t, newFile, "created")
 	storagePut(t, backup, "original")
 	reportPath := filepath.Join(c.RunDir, "desktop-report.json")
-	if err := WriteJSON(reportPath, map[string]any{"schema_version": 1, "changed_paths": []string{old, newFile}, "backups": []map[string]any{{"path": old, "backup": backup, "mode": 0640}}, "written_sha256": map[string]any{old: hashBytes([]byte("generated")), newFile: hashBytes([]byte("created"))}}); err != nil {
+	if err := WriteJSON(reportPath, map[string]any{
+		"schema_version": 1,
+		"changed_paths":  []string{old, newFile},
+		"backups":        []map[string]any{{"path": old, "backup": backup, "mode": 0640}},
+		"written_sha256": map[string]any{old: hashBytes([]byte("generated")), newFile: hashBytes([]byte("created"))},
+	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := RestoreContext(c); err != nil {
@@ -532,6 +578,7 @@ func TestStorageLegacyDefaultsReportRestoresBackupAndCreatedFile(t *testing.T) {
 		t.Fatal("idempotent legacy restore", err)
 	}
 }
+
 func TestStorageLegacyShellReportPreservesLinkAndLaterEdits(t *testing.T) {
 	c, _ := storageContext(t)
 	c.Options.RestoreStage = "shell"
@@ -544,7 +591,14 @@ func TestStorageLegacyShellReportPreservesLinkAndLaterEdits(t *testing.T) {
 	backup := filepath.Join(c.RunDir, "backups", "shell")
 	storagePut(t, backup, "old")
 	reportPath := filepath.Join(c.RunDir, "shell-report.json")
-	if err := WriteJSON(reportPath, map[string]any{"files": []map[string]any{{"path": link, "changed": true, "backup": backup, "sha256": hashBytes([]byte("generated")), "mode": 0600, "symlink_target": actual}}}); err != nil {
+	if err := WriteJSON(reportPath, map[string]any{"files": []map[string]any{{
+		"path":           link,
+		"changed":        true,
+		"backup":         backup,
+		"sha256":         hashBytes([]byte("generated")),
+		"mode":           0600,
+		"symlink_target": actual,
+	}}}); err != nil {
 		t.Fatal(err)
 	}
 	if err := RestoreContext(c); err != nil {
@@ -555,6 +609,7 @@ func TestStorageLegacyShellReportPreservesLinkAndLaterEdits(t *testing.T) {
 		t.Fatal("legacy link lost")
 	}
 }
+
 func TestStorageLegacyReportRefusesChangedOutput(t *testing.T) {
 	c, _ := storageContext(t)
 	c.Options.RestoreStage = "containers"
@@ -570,6 +625,7 @@ func TestStorageLegacyReportRefusesChangedOutput(t *testing.T) {
 		t.Fatal("legacy restore overwrote user edit")
 	}
 }
+
 func TestStorageLegacyReportRefusesChangedSymlinkIdentity(t *testing.T) {
 	c, _ := storageContext(t)
 	c.Options.RestoreStage = "shell"
@@ -583,7 +639,13 @@ func TestStorageLegacyReportRefusesChangedSymlinkIdentity(t *testing.T) {
 	if err := os.Symlink(other, link); err != nil {
 		t.Fatal(err)
 	}
-	if err := WriteJSON(filepath.Join(c.RunDir, "shell-report.json"), map[string]any{"files": []map[string]any{{"path": link, "changed": true, "backup": backup, "sha256": hashBytes([]byte("generated")), "symlink_target": actual}}}); err != nil {
+	if err := WriteJSON(filepath.Join(c.RunDir, "shell-report.json"), map[string]any{"files": []map[string]any{{
+		"path":           link,
+		"changed":        true,
+		"backup":         backup,
+		"sha256":         hashBytes([]byte("generated")),
+		"symlink_target": actual,
+	}}}); err != nil {
 		t.Fatal(err)
 	}
 	storageRequireError(t, RestoreContext(c), "symlink identity")
@@ -591,6 +653,7 @@ func TestStorageLegacyReportRefusesChangedSymlinkIdentity(t *testing.T) {
 		t.Fatal("changed link target overwritten")
 	}
 }
+
 func TestStorageLegacyReportRejectsMissingOutputHash(t *testing.T) {
 	c, _ := storageContext(t)
 	c.Options.RestoreStage = "cleanup"
@@ -613,11 +676,23 @@ func TestStorageRestoreProfileRootSelectsDesktopStage(t *testing.T) {
 	storagePut(t, path, "generated")
 	storagePut(t, backup, "original")
 	storagePut(t, filepath.Join(c.Home, "root-binary"), "root file")
-	if err := WriteJSON(c.ReportPath, map[string]any{"schema_version": 1, "file_changes": []map[string]any{{"path": filepath.Join(c.Home, "root-binary"), "sha256": hashBytes([]byte("root file")), "write_journal_version": 2}}}); err != nil {
+	if err := WriteJSON(c.ReportPath, map[string]any{
+		"schema_version": 1,
+		"file_changes": []map[string]any{{
+			"path":                  filepath.Join(c.Home, "root-binary"),
+			"sha256":                hashBytes([]byte("root file")),
+			"write_journal_version": 2,
+		}},
+	}); err != nil {
 		t.Fatal(err)
 	}
 	desktopReport := filepath.Join(root, "stages", "desktop", "profile-report.json")
-	if err := WriteJSON(desktopReport, map[string]any{"schema_version": 1, "completed_phases": []string{"desktop"}, "profile_config": map[string]any{"main_config": path}, "file_changes": []map[string]any{{"path": path, "backup": backup, "sha256": hashBytes([]byte("generated")), "write_journal_version": 2}}}); err != nil {
+	if err := WriteJSON(desktopReport, map[string]any{
+		"schema_version":   1,
+		"completed_phases": []string{"desktop"},
+		"profile_config":   map[string]any{"main_config": path},
+		"file_changes":     []map[string]any{{"path": path, "backup": backup, "sha256": hashBytes([]byte("generated")), "write_journal_version": 2}},
+	}); err != nil {
 		t.Fatal(err)
 	}
 	c.Options.RestoreProfile = root
@@ -631,11 +706,16 @@ func TestStorageRestoreProfileRootSelectsDesktopStage(t *testing.T) {
 		t.Fatal(c.ReportPath)
 	}
 }
+
 func TestStorageRestoreProfileAcceptsDesktopStageDirectory(t *testing.T) {
 	c, _ := storageContext(t)
 	path := filepath.Join(c.Home, "desktop.conf")
 	storagePut(t, path, "generated")
-	if err := WriteJSON(c.ReportPath, map[string]any{"schema_version": 1, "completed_phases": []string{"desktop"}, "file_changes": []map[string]any{{"path": path, "sha256": hashBytes([]byte("generated")), "write_journal_version": 2}}}); err != nil {
+	if err := WriteJSON(c.ReportPath, map[string]any{
+		"schema_version":   1,
+		"completed_phases": []string{"desktop"},
+		"file_changes":     []map[string]any{{"path": path, "sha256": hashBytes([]byte("generated")), "write_journal_version": 2}},
+	}); err != nil {
 		t.Fatal(err)
 	}
 	c.Options.RestoreProfile = c.RunDir
@@ -646,11 +726,15 @@ func TestStorageRestoreProfileAcceptsDesktopStageDirectory(t *testing.T) {
 		t.Fatal("stage directory profile was not restored")
 	}
 }
+
 func TestStorageRestoreProfileRefusesRootWithoutDesktop(t *testing.T) {
 	c, _ := storageContext(t)
 	path := filepath.Join(c.Home, "root-binary")
 	storagePut(t, path, "root file")
-	if err := WriteJSON(c.ReportPath, map[string]any{"schema_version": 1, "file_changes": []map[string]any{{"path": path, "sha256": hashBytes([]byte("root file")), "write_journal_version": 2}}}); err != nil {
+	if err := WriteJSON(c.ReportPath, map[string]any{
+		"schema_version": 1,
+		"file_changes":   []map[string]any{{"path": path, "sha256": hashBytes([]byte("root file")), "write_journal_version": 2}},
+	}); err != nil {
 		t.Fatal(err)
 	}
 	c.Options.RestoreProfile = c.RunDir
@@ -663,6 +747,7 @@ func TestStorageRestoreProfileRefusesRootWithoutDesktop(t *testing.T) {
 	}
 	storageRequireError(t, RestoreContext(c), "no desktop profile report")
 }
+
 func TestStorageNativeDefaultRestoreCanRunWithDesktopActive(t *testing.T) {
 	c, _ := storageContext(t)
 	c.Options.RestoreStage = "defaults"

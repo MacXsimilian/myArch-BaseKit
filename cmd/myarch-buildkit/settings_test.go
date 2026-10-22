@@ -26,7 +26,24 @@ func TestSettingsPartialMergePreservesExplicitFalse(t *testing.T) {
 }
 
 func TestSettingsRejectInvalidDocuments(t *testing.T) {
-	cases := []string{`null`, `[]`, `{"schema_version":1}`, `{"package_groups":{"core":false}}`, `{"package_groups":{"unknown":true}}`, `{"package_groups":{"utilities":null}}`, `{"package_groups":null}`, `{"laptop":null}`, `{"laptop":{"natural_scroll":null}}`, `{"laptop":{"natural_scroll":"true"}}`, `{"laptop":{"internal_scale":true}}`, `{"laptop":{"internal_scale":"4/0"}}`, `{"laptop":{"internal_keyboard":"hu,us"}}`, `{"laptop":{"lid_action":"suspend"}}`, `{"theme":"custom"}`, `{} {}`}
+	cases := []string{
+		`null`,
+		`[]`,
+		`{"schema_version":1}`,
+		`{"package_groups":{"core":false}}`,
+		`{"package_groups":{"unknown":true}}`,
+		`{"package_groups":{"utilities":null}}`,
+		`{"package_groups":null}`,
+		`{"laptop":null}`,
+		`{"laptop":{"natural_scroll":null}}`,
+		`{"laptop":{"natural_scroll":"true"}}`,
+		`{"laptop":{"internal_scale":true}}`,
+		`{"laptop":{"internal_scale":"4/0"}}`,
+		`{"laptop":{"internal_keyboard":"hu,us"}}`,
+		`{"laptop":{"lid_action":"suspend"}}`,
+		`{"theme":"custom"}`,
+		`{} {}`,
+	}
 	for _, data := range cases {
 		t.Run(data, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "settings.json")
