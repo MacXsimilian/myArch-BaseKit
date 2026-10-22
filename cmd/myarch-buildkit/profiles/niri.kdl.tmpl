@@ -1,0 +1,93 @@
+// Managed by myarch-buildkit; apply replaces this entire file after backup.
+// Keyboard layout is global. Output mode and position use Niri's defaults.
+input {
+    keyboard {
+        xkb {
+            layout "{{.Keyboard}}"
+        }
+    }
+    touchpad {
+        tap
+        natural-scroll
+    }
+    mouse {
+        natural-scroll
+    }
+}
+output "{{.Monitor}}" {
+    scale {{.Scale}}
+}
+environment {
+    TERMINAL "ghostty"
+    EDITOR "code --wait"
+    VISUAL "code --wait"
+    GIT_EDITOR "code --wait"
+    GH_EDITOR "code --wait"
+}
+layout {
+    gaps 12
+    background-color "transparent"
+    default-column-width { proportion 0.5; }
+}
+// DMS wallpaper remains visible in Niri's overview.
+layer-rule {
+    match namespace="^quickshell$"
+    place-within-backdrop true
+}
+spawn-at-startup "dms" "run"
+screenshot-path "~/Pictures/Screenshots/Screenshot-%Y-%m-%d-%H%M%S.png"
+
+binds {
+    Mod+Return { spawn "ghostty"; }
+    Mod+E { spawn "nautilus"; }
+    Mod+C { spawn "code"; }
+    Mod+Space { spawn "dms" "ipc" "call" "spotlight" "toggleWith" "apps"; }
+    Mod+L { spawn "dms" "ipc" "call" "lock" "lock"; }
+    Mod+Q repeat=false { close-window; }
+    Mod+F { maximize-column; }
+    Mod+Shift+F { fullscreen-window; }
+    Mod+Shift+Space { toggle-window-floating; }
+    Mod+O repeat=false { toggle-overview; }
+    Mod+R { switch-preset-column-width; }
+    Mod+Left { focus-column-left; }
+    Mod+Right { focus-column-right; }
+    Mod+Up { focus-window-up; }
+    Mod+Down { focus-window-down; }
+    Mod+Shift+Left { move-column-left; }
+    Mod+Shift+Right { move-column-right; }
+    Mod+Shift+Up { move-window-up; }
+    Mod+Shift+Down { move-window-down; }
+    Mod+Page_Up { focus-workspace-up; }
+    Mod+Page_Down { focus-workspace-down; }
+    Mod+Shift+Page_Up { move-column-to-workspace-up; }
+    Mod+Shift+Page_Down { move-column-to-workspace-down; }
+    Mod+1 { focus-workspace 1; }
+    Mod+2 { focus-workspace 2; }
+    Mod+3 { focus-workspace 3; }
+    Mod+4 { focus-workspace 4; }
+    Mod+5 { focus-workspace 5; }
+    Mod+6 { focus-workspace 6; }
+    Mod+7 { focus-workspace 7; }
+    Mod+8 { focus-workspace 8; }
+    Mod+9 { focus-workspace 9; }
+    Mod+Shift+1 { move-column-to-workspace 1; }
+    Mod+Shift+2 { move-column-to-workspace 2; }
+    Mod+Shift+3 { move-column-to-workspace 3; }
+    Mod+Shift+4 { move-column-to-workspace 4; }
+    Mod+Shift+5 { move-column-to-workspace 5; }
+    Mod+Shift+6 { move-column-to-workspace 6; }
+    Mod+Shift+7 { move-column-to-workspace 7; }
+    Mod+Shift+8 { move-column-to-workspace 8; }
+    Mod+Shift+9 { move-column-to-workspace 9; }
+    Print { screenshot; }
+    Shift+Print { screenshot-window; }
+    Ctrl+Print { screenshot-screen; }
+    Mod+Shift+Slash { show-hotkey-overlay; }
+    Mod+Shift+Escape { quit; }
+    XF86AudioRaiseVolume allow-when-locked=true { spawn "wpctl" "set-volume" "-l" "1.0" "@DEFAULT_AUDIO_SINK@" "5%+"; }
+    XF86AudioLowerVolume allow-when-locked=true { spawn "wpctl" "set-volume" "@DEFAULT_AUDIO_SINK@" "5%-"; }
+    XF86AudioMute allow-when-locked=true { spawn "wpctl" "set-mute" "@DEFAULT_AUDIO_SINK@" "toggle"; }
+    XF86AudioMicMute allow-when-locked=true { spawn "wpctl" "set-mute" "@DEFAULT_AUDIO_SOURCE@" "toggle"; }
+    XF86MonBrightnessUp allow-when-locked=true { spawn "brightnessctl" "set" "+5%"; }
+    XF86MonBrightnessDown allow-when-locked=true { spawn "brightnessctl" "set" "5%-"; }
+}

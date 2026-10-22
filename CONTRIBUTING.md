@@ -1,179 +1,92 @@
 # Contributing
 
-Changes to myArch-BaseKit should make workstation setup easier to understand, verify, and recover. Start with the [user guide](docs/user-guide.md) for the current behavior and support boundary, then keep your change focused on one problem.
+[Home](README.md) · [User guide](docs/user-guide.md) · [Packages](docs/packages.md)
 
-[Development workflow](#development-workflow) · [Validation](#validation) · [Code organization](#code-organization) · [Target acceptance](#target-acceptance-tests) · [Releases](#release-procedure)
+BaseKit is a personal CachyOS workstation recipe. Keep each operation explicit and reviewable: select packages, render preferences, validate, back up, apply and check. Prefer the upstream Dux CLI for plugin installation and greeter setup. Avoid adding staging queues, automatic rollback or general-purpose desktop-management frameworks.
 
-## Development workflow
+## Build and checks
 
-Use Go 1.23 or newer for development. The application uses only the Go standard library. Build scripts use Bash, GNU Make, Git, and standard GNU command-line utilities. Race tests need a working C toolchain. Release builds use the exact Go version recorded in [`.go-version`](.go-version).
-
-From the repository root:
+Use GNU Make and the Go version in [`.go-version`](.go-version). The program uses the Go standard library. Race tests require a working C toolchain.
 
 ```bash
-make help
 make build
-./bin/myarch-buildkit --version
 ./bin/myarch-buildkit plan
 make check
+make test-race
 ```
 
-`plan`, `--help`, `--version`, and `--settings-template` can be exercised without applying workstation changes. Ordinary tests use isolated fixtures. Run actual setup only in a disposable supported VM or on an explicitly prepared target.
-
-For a contribution:
-
-1. Create a branch and reproduce the problem or describe the intended behavior.
-2. Change the smallest relevant area. Preserve user data, explicit package review, and recovery behavior.
-3. Add a behavioral regression test when the change warrants one, then run the relevant checks below.
-4. Update the user guide for changed commands, settings, paths, or supported behavior.
-5. Inspect `git diff --check`, `git status`, and the staged diff before opening a pull request.
-
-A useful pull request explains the problem, resulting behavior, validation performed, and any remaining target-machine checks. For bug reports, include the build from `--version`, the exact command, expected/observed behavior, and relevant redacted report fields. Avoid attaching credentials, kubeconfigs, private paths, or complete personal configuration.
-
-Generated executables, archives, local settings, and run reports belong outside the source diff. `bin/` and `dist/` are ignored. Use `GO=/absolute/path/to/go` to select a compiler; `gofmt` follows that compiler unless `GOFMT` is overridden.
-
-## Validation
-
-| Command | Checks |
+| Target | Purpose |
 | --- | --- |
-| `make fmt` | Formats application Go sources in place |
-| `make check` | Formatting, ordinary Go tests, and `go vet` |
-| `make test-race` | Go tests with the race detector |
-| `make lint` | GitHub workflows with actionlint, and shell scripts with ShellCheck |
-| `make automation-test` | Offline packaging/release regression tests; requires Python 3.9+ |
-| `make package` | Builds the Linux x86-64 distribution archive |
-| `make package-check` | Verifies and smoke-tests the existing archive; requires Python 3 |
+| `build` | Build `bin/myarch-buildkit`; also the default target |
+| `fmt` | Format Go files |
+| `fmt-check` | Fail if Go files need formatting |
+| `test` | Run Go tests |
+| `vet` | Run `go vet` |
+| `check` | Formatting check, tests and vet |
+| `test-race` | Tests with the race detector |
+| `package` | Build a Linux x86-64 archive and checksum locally |
 
-Install actionlint and ShellCheck separately before `make lint`; the [workflow](.github/workflows/build.yml) records the actionlint version used by CI. Use Python 3.9 or newer for automation tests and package verification; it is not an application runtime dependency.
+Override the compiler with `GO=/absolute/path/to/go`; `GOFMT` can also be overridden. CI runs check, race tests and build with the pinned compiler. It does not apply desktop settings or publish releases.
 
-Run a focused application test while developing, then the checks appropriate to the final change:
+When Niri is available, exercise the actual parser:
 
 ```bash
-go test ./cmd/myarch-buildkit \
-  -run '^TestDisabledContainersSkipOptionalChecksButKeepCorePodman$' -v
+BASEKIT_NIRI_BINARY=/usr/bin/niri go test ./cmd/myarch-buildkit -run TestNativeNiriProfile -v
 ```
 
-Prefer assertions about behavior, preserved user data, and failure handling over keyword lists or fixed package counts. Run tests with fixtures instead of invoking package managers or modifying host services. Privileged-operation tests skip in ordinary runs; CI runs them separately as root against temporary directories on an ephemeral runner.
+This validates temporary files, including rejection of invalid configuration; it does not launch a compositor. The test skips when the environment variable is unset.
 
-Noninteractive commands run in separate process groups so cancellation can stop descendants. Interactive commands retain the foreground terminal group for prompts and shell job control; programmatic cancellation signals the wrapper and relies on it to forward termination. Detached helpers intentionally outlive their caller. Preserve these different contracts when changing the runner.
+## Source map
 
-### CI gates
-
-The [Build and test workflow](.github/workflows/build.yml) builds with the pinned release compiler, tests the minimum Go version and current stable Go, runs race/static/format checks, exercises privileged recovery in temporary directories, lints automation, and verifies the packaged CLI. Third-party actions are pinned to commit hashes and tracked by Dependabot.
-
-Build and test jobs run independently. A development artifact can exist while another job has failed; review the whole run. Publication requires all release gates. CI does not exercise a real graphical login, reboot, package transaction, or hardware lifecycle.
-
-## Code organization
-
-Application code and its adjacent tests live in `cmd/myarch-buildkit/`:
+All application code lives in `cmd/myarch-buildkit`.
 
 | Files | Responsibility |
 | --- | --- |
-| `main.go`, `settings.go`, `types.go`, `version.go`, `executable_identity.go` | CLI dispatch, settings, shared types, version, and executable identity |
-| `plan.go`, `plan_names.go`, `check_output.go`, `run_output.go` | Preview and terminal output |
-| `packages.go`, `kernel.go`, `kernel_images.go` | Package selection, kernel lifecycle, and system image verification |
-| `defaults.go`, `default_fonts.go`, `integrations.go`, `cleanup.go` | Application defaults, shell/container integrations, and cleanup |
-| `desktop.go`, `laptop.go`, `greeter.go`, `plugins.go`, `helpers.go` | Desktop profile, laptop settings, login, plugins, and user helpers |
-| `dms_compat.go`, `dms_schema.go`, `testdata/` | DMS compatibility inspection and source-pinned fixtures |
-| `staging.go`, `storage.go`, `recovery_records.go`, `report_store.go`, `system.go` | Pending configuration, backups, recovery, reports, and privileged operations |
-| `runner.go`, `parser.go` | Subprocess execution and configuration parsing |
-| `*_test.go` | Unit, subprocess, privileged, and opt-in target acceptance tests |
+| `app.go`, `executor.go` | CLI, settings, orchestration, platform/session checks and command execution |
+| `catalog.go`, `packages.txt` | Offline selection, DMS major-specific package choice, repository/AUR resolution |
+| `profile.go`, `profiles/` | Niri rendering, Dux preferences and shell scripts |
+| `terminal.go`, `containers.go` | Terminal integration and container configuration/checks |
+| `plugins.go`, `plugin_profile.go` | Install/inspect plugins and merge activation/widget placement |
+| `shell_services.go`, `desktop.go` | Service readiness and competing-startup detection |
+| `greeter.go`, `cleanup.go` | Upstream greeter delegation and constrained package cleanup |
+| `backup.go` | Original-content snapshots, backup manifest and file writes |
+| `version.go` | Executable version |
 
-Build and publication scripts live in `scripts/`, their offline tests in `scripts/tests/`, and CI in `.github/workflows/`. Keep the README focused on orientation and first use; the user guide owns operational detail.
+## Change rules
 
-Introduce a separate Go package when it has a clear responsibility and API. Shared implementation details do not need to become public solely to add another directory. Preserve fixture origin and license metadata when changing upstream snapshots.
+- Keep plan free of mutations and network requests. Cleanup preview may read the local package database.
+- Use `Runner` fakes for command behavior; ordinary tests must not install/remove packages, enable services or edit the developer's desktop.
+- Keep original snapshots when merging files. Reject malformed input, unsafe paths and concurrent edits instead of guessing.
+- Preserve unrelated JSON preferences and existing widget placements. Match upstream schemas before introducing new keys.
+- Use exact package allowlists for removal, recheck replacements, and preserve pacman's dependency checks and interactive confirmation.
+- Keep privileged system ownership with the upstream greeter installer; user-file backups must not be described as system rollback.
+- Update the package reference when the catalogue changes, and document changed settings/defaults in the setup guide.
 
-## Target acceptance tests
+Test observable behavior: preservation of personal settings, failed commands stopping later work, missing replacements blocking removal, repeatable merges and recoverable backups. Avoid tests that merely reproduce implementation details.
 
-The normal suite includes real subprocess tests for package-stage execution, cancellation and a foreground terminal, plus source-pinned DMS schema fixtures. Kernel lifecycle tests use simulated transactions; a separate production-reader test exercises protected root-owned files as a regular user. That reader test skips explicitly when a container maps system ownership away from root. Privileged recovery tests use temporary filesystems and run separately in CI. These checks do not establish that a real login or reboot succeeds.
+## Manual acceptance
 
-Use a disposable CachyOS x86-64 VM with UEFI/systemd-boot, an existing Hyprland session, and a snapshot before setup. Boot a known working stable/LTS fallback first. The selected stable/RC target must be a different kernel package. Run setup as the ordinary desktop user and retain its run report. Then execute the read-only acceptance gate from the repository:
+Use a disposable CachyOS VM or an explicitly prepared test machine. Take a snapshot before package and greeter changes.
 
-```bash
-MYARCH_TARGET_TEST=1 MYARCH_TARGET_PHASE=staged \
-  MYARCH_TARGET_SETTINGS=/absolute/path/to/run/report.json \
-  go test ./cmd/myarch-buildkit -run '^TestTargetSessionAndBootContracts$' -count=1 -v
-```
+1. Build/package from the intended checkout. Preview settings for the actual display and keyboard.
+2. Apply from a logged-out text console as a regular user. Review package and greeter prompts.
+3. Verify backup originals, manifest paths and records for newly created files.
+4. Log into Niri; check Ghostty selection, Dux startup, plugin activation, bar placement and keyboard/display settings.
+5. Run BaseKit check and upstream Dux diagnostics. Exercise calendar, VPN controls, Bluetooth/audio and rootless containers as available.
+6. Verify greeter login before testing Noctalia cleanup. Confirm dependency refusal and preservation of Niri/Quickshell.
+7. Rerun apply and inspect preservation of unrelated configuration. Remember that package upgrades and greeter prompts can recur.
+8. Restore selected user files from the manifest while logged out. Test system-level recovery separately.
 
-Save work, log out, choose the myarch-buildkit session, and rerun with `MYARCH_TARGET_PHASE=active`. The gate checks actual tools/defaults, pending files or the live desktop, DMS/plugins, laptop settings, and configured kernel images. It never installs packages, switches boot entries, restores files or reboots. An incomplete result fails the test; resolve it before advancing.
+Report exactly what was exercised. Unit tests and native parsing do not establish that a real login, hardware, current AUR build or upstream greeter succeeds.
 
-For kernel acceptance, keep the opted-in settings/report and run the gate after each deliberate boot step:
-
-| Step in the disposable VM | Gate environment | Required result |
-| --- | --- | --- |
-| Apply the packages stage and reboot the fallback | `MYARCH_TARGET_BOOT=fallback` | Running fallback, distinct target, target not the default |
-| Request `--kernel-boot once`, then reboot | `MYARCH_TARGET_BOOT=trial` | Running target, fallback still the default |
-| Test the session, request `--kernel-boot promote`, then reboot | `MYARCH_TARGET_BOOT=promoted` | Running target and target is the default |
-
-Use `MYARCH_TARGET_PHASE=active` for these boot checks. Capture `bootctl status`, `bootctl list --json=short`, `uname -r`, the JSON check report and the test output after every reboot. On a separate snapshot with only the target kernel installed, opted-in package/trial operations must refuse before mutation. Exercise restore desktop→greeter and greeter→desktop on separate snapshots; repeat a restore interrupted between file replacement and journal persistence, and verify manual edits remain protected after partial restore. Revert snapshots between scenarios. VM testing does not replace target-hardware graphics, input, display hotplug, suspend/resume or storage checks.
-
-## Build artifacts and reproducibility
+## Packaging
 
 ```bash
 make package
-make package-check
+(cd dist && sha256sum -c SHA256SUMS)
+tar -tzf dist/myarch-buildkit-linux-x86_64.tar.gz
 ```
 
-Packaging always builds **Linux amd64 with CGO disabled**, regardless of host `GOOS`, `GOARCH`, or `CGO_ENABLED` values. It writes:
+The archive includes the Linux x86-64 executable built with CGO disabled, README, contributing guide, all user documentation and license. Source-file links in the docs refer to the repository checkout; executable users can follow the included operational guides without a Go installation.
 
-| File | Purpose |
-| --- | --- |
-| `dist/myarch-buildkit-linux-x86_64.tar.gz` | Executable, license, documentation, inner checksums, and build metadata |
-| `dist/SHA256SUMS` | SHA256 of the distribution archive |
-
-Inside the archive, `BUILD-INFO` records the version, revision, dirty state, compiler, platform, and source epoch. The inner `SHA256SUMS` covers the executable, documentation, license, and metadata. Packaging builds into a temporary directory and leaves `bin/` unchanged. `make build` and `make checksum` separately produce the local executable and its checksum in `bin/`.
-
-Archive entry order and metadata are normalized. `SOURCE_DATE_EPOCH` defaults to the Git commit timestamp and can be supplied explicitly. Reproduction requires the same source contents, full Git revision, dirty state, build version, compiler, epoch, and GNU tar/gzip versions; compression-tool versions can affect bytes. Archive normalization does not make workstation package installation reproducible.
-
-`make package-check` verifies the archive and inner checksums and smoke-tests the extracted command. It does not apply any setup stages. On a host other than Linux x86-64 it verifies structure and checksums, then explicitly skips execution; complete the smoke test on Linux x86-64 before release.
-
-## Versioning
-
-The source version is `BuildID` in [`version.go`](cmd/myarch-buildkit/version.go). Application versions and settings/report schema versions are independent.
-
-| Build | Version identity |
-| --- | --- |
-| Direct `go build` | Source `BuildID` |
-| `make build` or `make package`, without `VERSION` | Development identity derived from the source version and short Git revision, plus a dirty marker when applicable |
-| Release with `VERSION=vMAJOR.MINOR.PATCH` | Exact requested version, validated against source `BuildID` |
-
-Stable release tags use `vMAJOR.MINOR.PATCH`, without leading zeroes. The publishing workflow does not publish prerelease tags. The 0.x series is initial development; describe compatibility changes in release notes instead of implying a stable 1.x contract.
-
-Update `.go-version` deliberately when changing the release compiler. Development and minimum-version testing remain distinct from that release pin.
-
-## Release procedure
-
-Publication is triggered by a matching stable version-tag push. Local Make targets never create tags, push commits, or publish releases.
-
-1. Update `BuildID` and user-facing documentation on a branch. Review and merge the intended release commit into `master`; wait for all checks. Complete the [target acceptance](#target-acceptance-tests) work needed for changed desktop, kernel, or recovery behavior, and record remaining limits in release notes.
-2. Use a clean checkout of that commit and the exact compiler in `.go-version`. Install the lint/test prerequisites, then validate and package it. Replace the example version with the intended release:
-
-   ```bash
-   make release VERSION=v0.3.0
-   (cd dist && sha256sum -c SHA256SUMS)
-   tar -xOf dist/myarch-buildkit-linux-x86_64.tar.gz BUILD-INFO
-   ```
-
-   `make release` runs formatting and vet checks, the race-enabled test suite, lint, automation tests, packaging, and package verification. `make release-check VERSION=v0.3.0` checks version syntax and its match with the source separately. No tag needs to exist yet. Local packaging permits a dirty checkout for testing and records it in `BUILD-INFO`; maintainers must use a clean checkout for publication.
-
-3. Create an annotated tag on the validated commit and push that tag:
-
-   ```bash
-   git tag -a v0.3.0 -m 'Release v0.3.0'
-   git push origin v0.3.0
-   ```
-
-4. Watch the tag's **Build and test** run. Publication waits for every required build, test, and lint job. The publishing job verifies that run's artifact, creates or resumes a draft with the expected assets, then publishes it. Only that job receives `contents: write`; it uses the built-in `GITHUB_TOKEN`.
-5. Review the published notes. Download both release assets, verify their checksums, and confirm the executable version and `BUILD-INFO` match the tag and intended commit.
-
-### Failed or repeated publication
-
-A failed validation gate prevents publication. For a transient runner failure, rerun the failed jobs. Publication can resume a matching draft and upload missing assets. A published release whose expected assets already match is a successful no-op. Any conflicting existing content is refused: the workflow does not overwrite or delete release assets.
-
-Investigate a conflict before taking further action. If the tagged source must change, prepare a new version and tag; do not move a published tag. Matching names alone are not sufficient to reuse an asset—its content must match.
-
-Manual workflow runs produce unpublished workflow artifacts. Selecting a stable tag retains that exact tag version in the artifact, but does not publish a release. Tags pushed by another workflow using `GITHUB_TOKEN` do not trigger this workflow; push release tags through your authenticated Git client.
-
-### Repository settings
-
-Maintainers should require the build, both Go test jobs, and automation lint checks before merging into `master`. Configure branch/tag protection and Actions permissions in GitHub; repository files do not apply those settings. Dependabot tracks pinned action updates. Review changes to the release compiler, action commits, and actionlint version deliberately.
+Packaging does not tag, upload or publish. Before a requested release, update the version, validate the intended revision, inspect the archive and publish the archive/checksum through the approved workflow. Checksums establish integrity, not publisher identity.

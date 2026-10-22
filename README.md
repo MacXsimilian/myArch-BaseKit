@@ -1,116 +1,77 @@
 # myArch-BaseKit
 
-An opinionated workstation setup tool for **CachyOS + Hyprland**. The `myarch-buildkit` command installs development tools, configures everyday applications, and stages a Hyprland desktop with Dux Shell (DMS) for your next login.
+A personal setup tool for **CachyOS, Niri and Dux Shell**. It installs the workstation packages, sets Ghostty as the preferred terminal, configures Podman and kind, activates five Dux plugins, and runs the Dux greeter installer.
 
-Preview the changes, choose your settings, apply them, and keep a report with configuration backups and recovery commands.
+Use it after installing CachyOS. It configures an existing system; it does not install the operating system, manage kernels or change the bootloader.
 
-[Get started](#quick-start) · [User guide](docs/user-guide.md) · [Package reference](docs/user-guide.md#package-reference) · [Recovery](docs/user-guide.md#troubleshooting-retry-and-restore) · [Contributing](CONTRIBUTING.md)
+## Start here
 
-## What it sets up
+1. Build the executable, or use a packaged executable you have already obtained.
+2. Generate settings and edit the monitor, keyboard and scale.
+3. Preview the changes.
+4. Log out of the graphical desktop and apply from a text console.
+5. Log into Niri and check the result.
 
-| Area | Included |
-| --- | --- |
-| Desktop | Hyprland profile, DMS Frame Mode, top bar, bottom dock, and a dedicated login session |
-| Plugins | Docker Manager, Kubernetes, Emoji & Unicode Launcher, Bongo Cat, and ClipBoard+ |
-| Applications | Ghostty, GNOME Files, VS Code, Bitwarden, Obsidian, Firefox, and VLC |
-| Development | Git tools, Go, uv, mise, Kubernetes, infrastructure tools, and modern CLI utilities |
-| Containers | Podman, Compose, kind integration, and rootless prerequisite checks |
-| Laptop | Internal keyboard layout, internal display scale, and natural scrolling |
-| Recovery | Per-run reports, configuration backups, conflict-aware restore, and explicit retry commands |
-
-Application defaults, packages, and shell integrations take effect during setup. Desktop, plugin, and laptop files are staged separately and applied before Hyprland starts at the next **myarch-buildkit** login. DankGreeter changes take effect at the next boot.
-
-## Requirements and project status
-
-- **Native CachyOS, Linux x86-64, and an already installed, working Hyprland session.** This project configures an existing system; it does not install the OS.
-- An ordinary desktop user with `sudo` access, internet access, and working package repositories. Run setup from an interactive terminal inside Hyprland, without `sudo` before the command.
-- Review the defaults: **Hungarian (`hu`) internal keyboard**, **4/3 internal display scale**, and **natural scrolling enabled**. All four package groups are enabled initially.
-
-The project is in **0.x development**. Automated checks cover setup and recovery logic; this build still needs real CachyOS login, reboot, and hardware validation. Configuration restore retains package upgrades and is not a complete system rollback. Read the [support limits](docs/user-guide.md#support-and-validation-limits) before applying it to a workstation you depend on.
-
-## Download a release
-
-Download `myarch-buildkit-linux-x86_64.tar.gz` and `SHA256SUMS` from [GitHub Releases](https://github.com/MacXsimilian/myArch-BaseKit/releases). From the directory containing both downloads:
-
-```bash
-sha256sum -c SHA256SUMS
-mkdir myarch-buildkit-release
-tar -xzf myarch-buildkit-linux-x86_64.tar.gz -C myarch-buildkit-release
-cd myarch-buildkit-release
-sha256sum -c SHA256SUMS
-./myarch-buildkit --version
-```
-
-The outer checksum verifies the archive; the inner checksums verify the executable, documentation, license, and `BUILD-INFO` metadata. Release builds use the compiler pinned in `.go-version` and need no Go, Python, or host libc runtime. Checksum verification checks file integrity; it is not a publisher signature.
-
-### Build from source
-
-Use Go 1.23 or newer and GNU Make. From a checkout:
+From the repository root, with the compiler specified in [`.go-version`](.go-version) and GNU Make installed:
 
 ```bash
 make build
-./bin/myarch-buildkit --version
-cd bin
+./bin/myarch-buildkit --settings-template > workstation.json
 ```
 
-Without Make, use `go build -trimpath -o bin/myarch-buildkit ./cmd/myarch-buildkit`. The remaining examples assume your working directory contains the executable. See [Contributing](CONTRIBUTING.md) for tests, packaging, and release builds.
-
-## Quick start
-
-### 1. Review your settings and plan
-
-Generate a settings file using a new filename, then edit the keyboard, scale, and package groups for your machine:
+Use a new filename: shell redirection overwrites an existing settings file. Edit `workstation.json` before continuing. The defaults are Hungarian keyboard layout, `eDP-1`, scale `4/3`, all four package groups, Dux 2 and greeter setup enabled.
 
 ```bash
-./myarch-buildkit --settings-template > myarch-buildkit-settings.json
-./myarch-buildkit plan --settings myarch-buildkit-settings.json
+./bin/myarch-buildkit plan --settings workstation.json
 ```
 
-`plan` makes no changes and performs no network requests. Add `--details` to inspect package alternatives. Keep this settings file for later checks and updates; [settings and optional flags](docs/user-guide.md#settings-and-optional-flags) explains every choice.
-
-### 2. Apply, then log in
+Save your work and **log out**, then switch to a text console such as `Ctrl+Alt+F3`. Sign in as your regular user and return to the repository directory:
 
 ```bash
-./myarch-buildkit apply --all --settings myarch-buildkit-settings.json
+./bin/myarch-buildkit apply --settings workstation.json
 ```
 
-Review the interactive package prompts. **Exit code 3 means configuration is ready for login**, not a failed installation. Save your work, log out, and select **myarch-buildkit** in the login session chooser. An ordinary Hyprland login leaves the pending bundle untouched.
-
-### 3. Check and finish
-
-From a terminal in the new session, return to the executable's directory:
+Review package prompts and choose **Niri** in the interactive greeter installer. After logging into Niri, open a new terminal:
 
 ```bash
-./myarch-buildkit check --settings myarch-buildkit-settings.json
+./bin/myarch-buildkit check --settings workstation.json
 ```
 
-After checks pass, finish cleanup:
+**Apply replaces the selected Niri configuration after backing it up and performs a full package upgrade.** It may need sudo, network access and an installed `paru` or `yay` for AUR packages. The Dux 2 profile selects `dms-shell-git`, which can require compilation. Read the [setup guide](docs/user-guide.md) before applying to your main machine.
+
+## What you get
+
+| Area | Managed by this project |
+| --- | --- |
+| Desktop | Niri configuration, Dux startup, frame/dock/clock preferences |
+| Terminal | Ghostty preference in Niri, Dux, terminal selectors and managed Bash/Zsh shells |
+| Plugins | Docker Manager, Kubernetes, Emoji Launcher, Bongo Cat and ClipBoard+, activated with bar widgets where applicable |
+| Shell features | Calendar, search, monitoring, media and theme dependencies; NetworkManager and Bluetooth service setup |
+| Development | CLI tools, Kubernetes/IaC tooling, Podman Compose and kind's Podman provider |
+| Login | Upstream Dux greeter setup, enabled by default |
+| Cleanup | Optional removal of selected duplicate apps and Noctalia after replacement checks |
+
+Calendar accounts, VPN profiles, Kubernetes credentials and Bongo Cat input permissions remain personal setup steps. Weather is disabled by the managed profile. Installing dependencies does not verify every feature on your hardware.
+
+## Moving from Noctalia
+
+You can start with CachyOS's Niri/Noctalia desktop. Apply this profile first, review competing startup entries, and verify Dux and its greeter before requesting cleanup. Cleanup never runs by default.
 
 ```bash
-./myarch-buildkit apply --stage verify --stage cleanup \
-  --settings myarch-buildkit-settings.json
+./bin/myarch-buildkit plan --settings workstation.json --cleanup-apps
+# Log out again before applying:
+./bin/myarch-buildkit apply --settings workstation.json --cleanup-apps
 ```
 
-Bongo Cat typing animation requires a separate [input permission step](docs/user-guide.md#included-dms-plugins). Open a new terminal for shell changes. Save work before rebooting to test the greeter, then check the display, keyboard, audio, networking, and suspend/resume on your hardware.
+Noctalia cleanup requires the Dux greeter handoff, even if you chose to keep another login manager. It retains Niri and Quickshell, leaves personal Noctalia files in place, and uses pacman's normal confirmation and dependency checks. See [migration and cleanup](docs/user-guide.md#migrating-from-noctalia-and-cleaning-up-applications).
 
-Each apply run prints the path to `myarch-buildkit-runs/RUN_ID/report.json` under your working directory. Keep that report and the internal state/backups it references. If a step fails, use its printed retry or restore command; see [Troubleshooting, retry and restore](docs/user-guide.md#troubleshooting-retry-and-restore).
+## Documentation
 
-## Updates and reproducibility
+- [Setup and operation](docs/user-guide.md): prerequisites, settings, features, cleanup and backups.
+- [Package reference](docs/packages.md): complete catalogue, groups and fallback packages.
+- [Troubleshooting](docs/troubleshooting.md): failed setup, version mismatches, startup conflicts and recovery.
+- [Contributing](CONTRIBUTING.md): implementation map, tests, manual acceptance and packaging.
 
-The packages stage performs a full upgrade against enabled repositories and updates selected AUR packages. Desktop runs fetch the five plugins from their upstream default branches and record exact commits. Optional [`plugin_commits`](docs/user-guide.md#included-dms-plugins) settings pin individual plugins to those commits; they do not pin OS packages.
+Configuration backups are ordinary files with a manifest. There is no automatic rollback, and backups do not undo packages, services or greeter system changes. Tests cover the implementation and optional native Niri parsing; a real graphical login and hardware checks are still required.
 
-Kernel selection is opt-in: the default `kernel_channel: "unchanged"` keeps normal package upgrade behavior. The optional stable/RC workflow requires a distinct, verified stable/LTS fallback and a supported systemd-boot layout, with explicit trial boot and promotion. Read the [kernel guide](docs/user-guide.md#optional-cachyos-kernel-selection) before enabling it.
-
-DMS compatibility is checked against installed or exact release schemas, and Hyprland configuration must pass native validation. A successful older setup does not establish compatibility with every future upstream version.
-
-## Development builds and contributing
-
-The [Build and test workflow](https://github.com/MacXsimilian/myArch-BaseKit/actions/workflows/build.yml) produces the **myarch-buildkit-linux-x86_64** artifact for branch pushes, pull requests, and manual runs. Unzip it and follow the release verification commands above. Artifacts expire after 30 days. Read the entire workflow result: an available development artifact can coexist with a failed test job.
-
-To contribute, start with the [development workflow](CONTRIBUTING.md#development-workflow). Include a focused change, relevant validation, and documentation for any changed user behavior. For a bug report, include `--version`, the failing command, and relevant redacted report fields; never post credentials or private configuration.
-
-The source version is defined in [`version.go`](cmd/myarch-buildkit/version.go). Make-built development binaries include the Git revision and a dirty marker when applicable; release binaries use the exact `vMAJOR.MINOR.PATCH` tag. Compatibility is still evolving during the 0.x series. Maintainers should follow the [release procedure](CONTRIBUTING.md#release-procedure).
-
-## License
-
-[MIT](LICENSE). Source fixtures retain their upstream license notices.
+[MIT license](LICENSE).

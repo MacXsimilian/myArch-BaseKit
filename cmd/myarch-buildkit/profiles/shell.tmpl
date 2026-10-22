@@ -1,0 +1,15 @@
+# Managed by myarch-buildkit. Loaded once per interactive shell.
+case $- in *i*) ;; *) return ;; esac
+export TERMINAL=ghostty
+export EDITOR='code --wait' VISUAL='code --wait'
+export GIT_EDITOR='code --wait' GH_EDITOR='code --wait'
+{{if .KindPodman}}export KIND_EXPERIMENTAL_PROVIDER=podman
+{{end}}
+if [ "${MYARCH_SHELL_INITIALIZED-}" != 1 ]; then
+    MYARCH_SHELL_INITIALIZED=1
+    command -v mise >/dev/null 2>&1 && eval "$(mise activate {{.Shell}})"
+    command -v zoxide >/dev/null 2>&1 && eval "$(zoxide init {{.Shell}})"
+    command -v fzf >/dev/null 2>&1 && eval "$(fzf --{{.Shell}})"
+    command -v starship >/dev/null 2>&1 && eval "$(starship init {{.Shell}})"
+    command -v direnv >/dev/null 2>&1 && eval "$(direnv hook {{.Shell}})"
+fi

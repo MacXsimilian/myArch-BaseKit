@@ -1,0 +1,16 @@
+{
+  "frameEnabled": true,
+  "frameMode": "connected",
+  "frameScreenPreferences": ["all"],
+  "showDock": true,
+  "dockPosition": 1,
+  "dockAutoHide": false,
+  "dockSmartAutoHide": false,
+  "clockFormat": "24h",
+  "showSeconds": false,
+  "showWorkspaceIndex": true,
+  "notificationHistoryEnabled": true,
+  "soundNewNotification": false,
+  "weatherEnabled": false,
+  "useAutoLocation": false
+}
