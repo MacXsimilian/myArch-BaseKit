@@ -10,10 +10,11 @@ import (
 )
 
 type Settings struct {
-	KernelChannel string          `json:"kernel_channel"`
-	SchemaVersion int             `json:"schema_version"`
-	PackageGroups map[string]bool `json:"package_groups"`
-	Laptop        LaptopSettings  `json:"laptop"`
+	KernelChannel string            `json:"kernel_channel"`
+	PluginCommits map[string]string `json:"plugin_commits,omitempty"`
+	SchemaVersion int               `json:"schema_version"`
+	PackageGroups map[string]bool   `json:"package_groups"`
+	Laptop        LaptopSettings    `json:"laptop"`
 }
 
 type LaptopSettings struct {

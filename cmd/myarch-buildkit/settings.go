@@ -112,6 +112,18 @@ func LoadSettings(path string) (Settings, error) {
 	if !contains([]string{"unchanged", "stable", "rc"}, settings.KernelChannel) {
 		return settings, errors.New("kernel_channel must be unchanged, stable or rc")
 	}
+	for id, commit := range settings.PluginCommits {
+		known := false
+		for _, plugin := range RequestedPlugins {
+			known = known || plugin.ID == id
+		}
+		if !known {
+			return settings, fmt.Errorf("unknown plugin in plugin_commits: %s", id)
+		}
+		if !regexp.MustCompile(`^[0-9a-f]{40}$`).MatchString(commit) {
+			return settings, fmt.Errorf("plugin_commits.%s must be a full lowercase 40-character commit hash", id)
+		}
+	}
 	if settings.SchemaVersion != 2 {
 		return settings, errors.New("settings schema_version must be 2")
 	}

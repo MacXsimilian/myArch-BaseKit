@@ -482,6 +482,9 @@ func RestoreGreeter(c *Context) error {
 		return nil
 	}
 	runID, _ := record["run_id"].(string)
+	if err := ensureRecoveryHelper(c); err != nil {
+		return err
+	}
 	if _, err := rootOperation(c, "internal-greeter-restore", systemPayload{RunID: runID}); err != nil {
 		return err
 	}

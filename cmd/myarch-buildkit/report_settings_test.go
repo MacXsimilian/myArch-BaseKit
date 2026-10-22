@@ -46,6 +46,7 @@ func settingsSnapshotObject(t *testing.T) map[string]any {
 
 func TestSettingsFromRunReportPreservesEffectiveSettings(t *testing.T) {
 	want := DefaultSettings()
+	want.PluginCommits = map[string]string{"dockerManager": "0123456789012345678901234567890123456789"}
 	want.PackageGroups["utilities"] = false
 	want.PackageGroups["development"] = false
 	want.Laptop.InternalScale = "3/2"

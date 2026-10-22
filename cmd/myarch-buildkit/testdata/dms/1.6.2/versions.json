@@ -1,0 +1,14 @@
+{
+  "settings": 18,
+  "settings_source": {
+    "url": "https://raw.githubusercontent.com/duxlabs-dev/dux-shell/v1.6.2/quickshell/Common/SettingsData.qml",
+    "sha256": "53f6e6cf15400222084d847aab07f207ac6b883cbf6b1268ebe5072a833eef68",
+    "declaration": "readonly property int settingsConfigVersion: 18"
+  },
+  "session": 4,
+  "session_source": {
+    "url": "https://raw.githubusercontent.com/duxlabs-dev/dux-shell/v1.6.2/quickshell/Common/SessionData.qml",
+    "sha256": "571e640cc70081df8c3710ddf9cd01bc4830c5ba6371f3269c0d372c902f1492",
+    "declaration": "readonly property int sessionConfigVersion: 4"
+  }
+}

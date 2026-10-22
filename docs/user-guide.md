@@ -1,16 +1,25 @@
-# myArch-BaseKit: User Guide
+# User guide
 
-Practical setup and daily-use reference\
-Documented build: **v0.3.0**\
-Documentation date: **6 October 2026**
+Use this guide to prepare a CachyOS workstation, understand what changes, verify the result, and recover configuration when a stage fails. Commands refer to the `myarch-buildkit` executable; the project is named **myArch-BaseKit**.
 
-**Current required base: CachyOS on x86_64 with Hyprland already installed and running.** Regular Arch Linux, EndeavourOS and other distributions are not supported by this release. The installer currently checks for CachyOS explicitly.
+[Back to README](../README.md) · [Developer guide](../CONTRIBUTING.md) · [Release downloads](https://github.com/MacXsimilian/myArch-BaseKit/releases)
 
-The project is now named **myArch-BaseKit**. The executable is named `myarch-buildkit`, the login-session chooser displays **myarch-buildkit**, and configuration/report paths use the `myarch-buildkit` name. Use the commands and session label shown in this guide.
+## On this page
 
-## 1. Purpose and scope
+- [Purpose and prerequisites](#purpose-and-prerequisites)
+- [First setup](#first-setup)
+- [Commands for an existing installation](#commands-for-an-existing-installation)
+- [Settings and optional flags](#settings-and-optional-flags)
+- [What changes after setup](#what-changes-after-setup)
+- [Optional CachyOS kernel selection](#optional-cachyos-kernel-selection)
+- [Pending configuration and reports](#pending-desktop-configuration-and-reports)
+- [Troubleshooting, retry and restore](#troubleshooting-retry-and-restore)
+- [Support and validation limits](#support-and-validation-limits)
+- [Package reference](#package-reference)
 
-myArch-BaseKit is a minimal, opinionated workstation builder for development, DevOps, SRE, cloud and platform engineering. It turns the currently required CachyOS + Hyprland base into a consistent work environment, replacing a long personal setup checklist with one repeatable process: install the chosen tools, set sensible defaults, configure the desktop and three laptop preferences, verify the result, and keep reports for troubleshooting.
+## Purpose and prerequisites
+
+myArch-BaseKit is an opinionated workstation builder for development, DevOps, SRE, cloud and platform engineering. It turns the currently required CachyOS + Hyprland base into a consistent work environment, replacing a long personal setup checklist with one repeatable process: install the chosen tools, set sensible defaults, configure the desktop and three laptop preferences, verify the result, and keep reports for troubleshooting.
 
 The goal is a dependable starting point for building and operating software and infrastructure. The included profile has opinionated defaults, such as Hungarian layout for the built-in keyboard and 4/3 scale for the internal display. Review those choices before sharing it with colleagues or using it on another laptop.
 
@@ -18,7 +27,7 @@ The goal is a dependable starting point for building and operating software and 
 
 | Area | Main result |
 | --- | --- |
-| Desktop | Hyprland with Dank Material Shell (DMS), Frame Mode, top bar and bottom dock, with application-default appearance |
+| Desktop | Hyprland with Dux Shell (DMS, formerly Dank Material Shell), Frame Mode, top bar and bottom dock, with application-default appearance |
 | DMS plugins | Docker Manager, Kubernetes, Emoji & Unicode Launcher, Bongo Cat and ClipBoard+ |
 | Everyday apps | Ghostty, GNOME Files, VS Code, Bitwarden, Obsidian, Firefox for PDFs, VLC for media |
 | Utilities | PeaZip, GNOME Camera/Snapshot, Kooha, LocalSend and SMB browsing in Files |
@@ -34,73 +43,81 @@ Use `plan` to see the complete selected tool list. Additional dependency package
 - Run it in an interactive terminal inside Hyprland, as your regular desktop user. Ghostty is suitable. Use a text TTY for recovery, not ordinary setup.
 - Have an internet connection, a working CachyOS package configuration and sudo access. Package and AUR prompts require your review.
 - Keep the executable in a writable working directory, such as Downloads. Reports are created in the directory you run it from.
+- The full laptop/desktop setup needs a verifiable built-in display and keyboard. Package and other independent stages can be selected separately.
 - Save open work before logging out to apply the staged desktop. The installer backs up configuration, but those backups are not a complete system backup.
 
 You need only the Linux x86_64 executable `myarch-buildkit` to run the installer. It is compiled Go and uses the Go standard library; you do not need Go or Python installed to run it. The source project is supplied separately for maintenance. Bash/Zsh/Fish configuration and small command wrappers remain shell files. Do not put `sudo` before the whole command.
 
-<!-- pagebreak -->
+## First setup
 
-## 2. First setup
+### 1. Verify the executable and choose settings
 
-### Inspect the installer's identity and plan
-
-Save the executable as `myarch-buildkit`, then run:
+[Download and verify a release](../README.md#download-a-release), or [build from source](../README.md#build-from-source). Open a terminal in the directory containing `myarch-buildkit`. Generate a settings file using a new filename:
 
 ```bash
-cd ~/Downloads
-chmod +x myarch-buildkit
 ./myarch-buildkit --version
-./myarch-buildkit plan
+./myarch-buildkit --settings-template > myarch-buildkit-settings.json
 ```
 
-`plan` shows a compact setup preview: package groups, changes during setup, changes at your next myarch-buildkit login, and next-boot greeter changes. Only selected stages appear. `plan --details` shows Package options tables with Tool, Repository packages and AUR fallback columns. Names lead with the recognizable tool and are sorted A–Z, ignoring capitalization. Podman and kubectl remain visible in Containers/Development as references to Core. The total counts unique selected requirements; actual installs are determined during apply. Neither mode checks live package availability or changes anything. `--dry-run` is an equivalent preview.
+Edit the file before applying it. The defaults enable all package groups, Hungarian (`hu`) internal keyboard layout, 4/3 internal display scale, and natural scrolling. See the [settings reference](#settings-and-optional-flags) for the complete schema and precedence.
 
-The output uses restrained color in a real terminal and plain text when redirected. Set `NO_COLOR=1` to disable color explicitly. The preview ends with an apply command that retains your settings and selected options.
-
-For an explanation of every package and its purpose, see the [package reference](#9-package-reference).
-
-Package sources follow this order: keep a supported installed variant when its update source is available; otherwise try the listed repository package options from left to right, then the listed AUR fallbacks. Pacman uses the repositories enabled in `/etc/pacman.conf` in their configured priority order. The Repository packages column lists package names; exact repository names and availability are determined during apply.
-
-The preview ends with the apply command and relevant follow-up commands. Bongo typing permission is an explicit optional step granting input-event access after logout. Choose myarch-buildkit at login, run the displayed check command, then run the displayed verify/cleanup command after checks pass. Those commands retain only settings and options relevant to each action.
-
-Before the first full run, review the defaults in section 4. They include a **Hungarian internal keyboard layout**, **4/3 internal scale**.
-
-### Stage, then log in
+### 2. Preview the changes
 
 ```bash
-./myarch-buildkit apply --all
+./myarch-buildkit plan --settings myarch-buildkit-settings.json
+./myarch-buildkit plan --details --settings myarch-buildkit-settings.json
 ```
 
-The laptop and desktop stages now create separate pending files. The installer leaves the running DMS settings, session state and Hyprland configuration untouched. Application defaults, shell setup, packages, and next-boot system configuration can still change during this run.
+Both commands are read-only and make no network requests. The compact plan groups changes by when they take effect. `--details` adds repository and AUR alternatives for every selected tool. The requirement count is deduplicated; actual packages and sources are resolved during apply.
 
-**Exit status 3 means validated configuration is staged for login.** Look for Waiting for login in the terminal output, or `pending_login` in the run's `report.json`. Cleanup is blocked while a bundle is pending. `verify` validates the pending bundle and reports the running desktop separately, without requiring the new profile to be running yet. Missing or invalid staging data produces an error and a repair command.
+The plan ends with commands that retain your settings and selected options. It also shows the optional Bongo Cat input permission step. Output is plain text when redirected; set `NO_COLOR=1` to disable terminal color.
 
-Save your work, log out, and select **myarch-buildkit** in the login screen's session chooser. This dedicated session applies the pending files before starting Hyprland; Hyprland then starts DMS through one `dms run` invocation. Selecting the ordinary Hyprland session leaves the bundle pending. If DankGreeter was newly enabled, it takes effect after reboot; your existing display manager may offer the myarch-buildkit session immediately.
+Package selection keeps a supported installed variant when its update source is available. Otherwise, it tries the listed repository candidates from left to right, then AUR candidates. Repository priority comes from `/etc/pacman.conf`. The [package reference](#package-reference) explains each tool.
 
-### Confirm completion
-
-In the new graphical session:
+### 3. Apply and enter the new session
 
 ```bash
-./myarch-buildkit check
-./myarch-buildkit apply --stage verify --stage cleanup
+./myarch-buildkit apply --all --settings myarch-buildkit-settings.json
 ```
 
-`check` prints a readable summary of **pending configuration**, **running desktop**, app defaults and container readiness. Use `check --details` for extended findings or `check --json` for the complete JSON report, including errors. JSON output remains one valid document even when a check fails. These checks create no run folder. A validated pending bundle returns exit status 3; failed or incomplete checks return 2.
+Review package and AUR prompts. Changes take effect at different boundaries:
 
-After application, the desktop journal in the original run's `report.json` changes from `pending_login` to `applied_before_login`. That confirms the files were applied before login; check DMS IPC, plugin loading, the three laptop preferences and the actual display before cleanup. The run's stage summary retains its original staging outcome, while the profile journal and internal login outcome record later application.
+| When | Changes |
+| --- | --- |
+| During setup | Packages, application defaults, shell/container configuration, and installed login support |
+| Next **myarch-buildkit** login | Staged laptop settings, Hyprland profile, DMS settings, and plugins |
+| Next boot | Newly configured DankGreeter |
 
-Apply prints readable stage results, the reason for blocked/skipped work and relevant retry or recovery commands. Verification requests no sudo up front. Cleanup requests sudo only when it performs a privileged action.
+The desktop and laptop stages leave active user desktop files untouched while they prepare the pending bundle. They do not stop DMS or reload Hyprland.
 
-Open a new terminal for shell changes. The next-boot greeter takes effect after reboot. Test the login screen after saving work.
+**Exit code 3 means validated configuration is waiting for login.** It is an expected setup outcome. Cleanup stays blocked until that pending work is applied and verification passes. If a stage fails instead, follow its printed retry/recovery command before continuing.
 
-If this machine is already set up and checks pass, there is no need to repeat the full installation just to use the tools.
+Save work, log out, and select **myarch-buildkit** in the session chooser. Its launcher applies the files before starting Hyprland, which starts DMS once through `dms run`. Choosing the ordinary Hyprland session leaves the bundle pending. If DankGreeter was newly enabled, it activates after reboot; the current display manager may offer the new session immediately.
 
-<!-- pagebreak -->
+### 4. Verify, then finish cleanup
 
-## 3. Commands for an existing installation
+From a terminal in the new session, return to the executable's directory and run:
 
-All examples assume the terminal is in the directory containing the executable. Stages always run in the installer's fixed order, regardless of the order of your flags. Preflight is automatically included in an apply run.
+```bash
+./myarch-buildkit check --settings myarch-buildkit-settings.json
+```
+
+Bongo Cat's typing animation needs the separate [input permission step](#included-dms-plugins). Missing permission appears in the running-desktop check. Resolve reported issues, then run cleanup:
+
+```bash
+./myarch-buildkit apply --stage verify --stage cleanup \
+  --settings myarch-buildkit-settings.json
+```
+
+`check --details` explains individual findings; `check --json` prints the complete report as one JSON document, including setup-settings or context errors for a valid invocation. Argument-parsing errors still use the ordinary CLI error output. Standalone checks do not create a run folder. Use `apply --stage verify` when you need a saved verification report.
+
+The original run's desktop journal changes from `pending_login` to `applied_before_login` after activation. That records file application, not a complete hardware test. Verify DMS, plugins, display scaling, keyboard layout, and scrolling. Open a new terminal for shell changes. Save work and reboot to test the new greeter, then check audio, networking, display hotplug, and suspend/resume.
+
+Keep the same `--settings` argument on checks and follow-up runs, or use the original run's `report.json` as a settings snapshot. Once checks pass, there is no need to repeat a full installation just to use the tools.
+
+## Commands for an existing installation
+
+All examples assume the terminal is in the directory containing the executable. If you used a custom settings file, append `--settings PATH` to plans, checks, and apply commands; recovery reads the saved journal instead. Stages always run in the installer's fixed order, regardless of the order of your flags. Preflight is automatically included in an apply run.
 
 | Stage | What it does |
 | --- | --- |
@@ -170,9 +187,7 @@ To reuse a specific run's settings, add `--settings` with its actual report path
 
 `--configure-only` stages desktop/laptop user files for the next myarch-buildkit login, while other selected configuration stages apply their changes during setup. It skips packages **and all cleanup**, including launcher hiding. It is not a preview. Configuration stages require their tools to be installed already.
 
-<!-- pagebreak -->
-
-## 4. Settings and optional flags
+## Settings and optional flags
 
 ### Create a settings file
 
@@ -194,35 +209,80 @@ The installer also automatically reads `~/.config/myarch-buildkit/settings.json`
 
 A laptop-only stage needs either an existing myarch-buildkit desktop profile that loads the static laptop fragment or a subsequent desktop stage. Older profiles must be updated by staging desktop too. Cancel an earlier pending stage before staging another run of the same stage.
 
-### Current defaults
+### Settings reference
 
-| Setting under `laptop` | Fresh default | Meaning |
-| --- | --- | --- |
-| `internal_scale` | `"4/3"` | Internal display scaling; validated against the panel |
-| `internal_keyboard` | `"hu"` | Hungarian internal keyboard layout |
-| `natural_scroll` | `true` | Natural scrolling for pointer/touchpad policy |
+The generated file is the authoritative starting point. This complete example matches the fresh defaults and adds an empty optional plugin-pin map:
 
-The top-level `kernel_channel` defaults to `"unchanged"`; opt into `"stable"` or `"rc"` as described in [kernel selection](#latest-cachyos-release-candidate-kernel).
+```json
+{
+  "schema_version": 2,
+  "kernel_channel": "unchanged",
+  "plugin_commits": {},
+  "package_groups": {
+    "core": true,
+    "utilities": true,
+    "development": true,
+    "containers": true
+  },
+  "laptop": {
+    "internal_scale": "4/3",
+    "internal_keyboard": "hu",
+    "natural_scroll": true
+  }
+}
+```
 
-The template uses `schema_version: 2`. All four package groups are enabled by default; `core` must remain enabled. Partial settings are merged with defaults; unknown keys are rejected. There are no arbitrary per-application switches. Disabling a group does not uninstall its existing packages.
+| Setting | Accepted values and behavior |
+| --- | --- |
+| `schema_version` | `2` |
+| `kernel_channel` | `"unchanged"`, `"stable"`, or `"rc"`; see [kernel selection](#optional-cachyos-kernel-selection) |
+| `plugin_commits` | Optional map of [plugin registry IDs](#included-dms-plugins) to full, lowercase, 40-character Git commit hashes |
+| `package_groups` | Boolean values for `core`, `utilities`, `development`, and `containers`; `core` must remain enabled |
+| `laptop.internal_scale` | A number, decimal string, or ratio string such as `"4/3"`; 0.25–8, subject to native display validation |
+| `laptop.internal_keyboard` | One 2–3 letter XKB layout identifier, such as `"hu"` or `"us"`; only verified built-in keyboards are targeted |
+| `laptop.natural_scroll` | `true` or `false` for pointer and touchpad policy |
 
-The default scale is 4/3. A settings-file scale or `--laptop-scale` explicitly overrides it. Unsupported scales are reported rather than silently substituted. Settings from older builds must drop the removed refresh, external-display, power, lid and idle keys; unknown keys are rejected.
+Settings resolve in this order: built-in defaults, the explicit `--settings` file (or the discovered default file), then applicable CLI overrides such as `--laptop-scale`. An explicit file replaces automatic discovery; the two files are not layered together.
+
+Partial settings files inherit defaults. Unknown keys, invalid types, and null values are rejected. A saved run report must contain a complete settings snapshot. Disabling an optional package group does not uninstall existing packages; `core` still includes Podman and kubectl for the desktop plugins.
+
+An unsupported display scale is reported rather than substituted. Older settings must drop removed refresh, external-display, power, lid, and idle keys. Invalid current settings do not prevent [journal-based recovery](#restore-a-stages-configuration).
 
 ### Optional flags
 
 | Flag | When to use it |
 | --- | --- |
-| `--laptop-scale 4/3` | Explicitly choose the internal scale for a laptop/desktop run |
+| `--settings PATH` | Use a settings file or a saved run report's settings snapshot |
+| `--stage NAME` | Select a stage; repeat the flag to select more than one |
+| `--all` | Select the normal stage set; also the default when no `--stage` is given |
+| `--package-group NAME` | Restrict package installation to one enabled group; combine with `--stage packages` for a package-only run |
+| `--configure-only` | Apply selected configuration stages while skipping packages and all cleanup |
+| `--laptop-scale 4/3` | Override the internal scale for an apply/plan run |
 | `--keep-terminal` | Keep Alacritty when cleanup runs |
-| `--enable-podman-socket` | Enable the user API socket for clients that require it; include the containers stage |
-| `--remove-notes gnote` | Remove a chosen dedicated notes app during cleanup; allowed names: `gnote`, `bijiben`, `knotes`, `xpad` |
-| `--help` | Show the installed installer's command reference |
+| `--enable-podman-socket` | Enable this user's local API socket; include the containers stage |
+| `--remove-notes gnote` | Explicitly remove `gnote`, `bijiben`, `knotes`, or `xpad` during cleanup; repeat as needed |
+| `--details` | Show package alternatives in `plan`, or diagnostic details in `check` |
+| `--json` | Print the complete `check` report; cannot combine with `--details` |
+| `--dry-run` / `--check` | Aliases for `plan` / `check` |
+| `--settings-template` | Print the default settings JSON |
+| `--version` / `--help` | Show executable identity / installed command reference |
 
-`check` can use `--settings PATH`, including a saved run's `report.json`. It accepts `--details` or `--json`, separately, and cannot be combined with stage execution or apply-only options. `--cancel-pending laptop` and `--cancel-pending desktop` are standalone recovery actions for a missing staging reference; see section 7.
+With no command or stage flags, the CLI defaults to apply and the full stage set. Use explicit `plan`, `check`, or `apply` in saved commands and scripts. `--all` and `--stage` cannot be combined. Stage order is fixed; the order of repeated flags does not change it.
 
-<!-- pagebreak -->
+`check` accepts `--settings`, and either `--details` or `--json`; it cannot execute stages or accept apply-only choices. Kernel boot selection and recovery are standalone actions documented in their own sections.
 
-## 5. What changes after setup
+### Exit codes
+
+| Code | Meaning | Next step |
+| --- | --- | --- |
+| `0` | The requested action completed, or checks passed with no pending login | Review any manual checks in the output |
+| `2` | Invalid invocation, failure, or incomplete checks | Read the error and use the reported retry/repair action |
+| `3` | Valid configuration is pending login | Log out, choose myarch-buildkit, and check again |
+| `130` | Setup was interrupted | Inspect its saved report before retrying or restoring |
+
+Exit 3 is expected after successful staging. Automation should handle it explicitly; a shell using `set -e` will otherwise stop. There is no unattended package-install mode: package review prompts remain interactive.
+
+## What changes after setup
 
 ### Apps, shell and everyday use
 
@@ -240,13 +300,17 @@ Fastfetch uses its built-in Arch logo through `~/.config/fastfetch/config.jsonc`
 
 The installer keeps your existing login shell. It does not switch you to Zsh or Fish. It adds supported Starship, mise, zoxide, fzf and direnv integrations to Bash and applicable existing Zsh/Fish configurations. Existing prompt frameworks are preserved and may need manual adjustment if they conflict. Editor-related shell defaults use `code --wait`.
 
+Font checks verify the installed `JetBrainsMono Nerd Font Mono` family, the effective Fontconfig monospace alias, Ghostty's resolved font, and VS Code's default user editor/terminal settings. VS Code workspace or profile overrides still need an in-editor check; `check --details` names that scope.
+
 Sign into Bitwarden, GitHub and other services yourself. Choose your Obsidian vault. Configure project runtimes and dependencies as needed. SMB support does not create NAS mounts, store credentials or install a Samba server. The manifest does not add VPN plugins or VPN profiles.
 
 DMS clipboard history starts disabled. ClipBoard+ uses that same backend; `Super+V` opens its panel. Use `cachyos-clipboard instructions` for the clipboard check before enabling history.
 
 ### Included DMS plugins
 
-Each desktop run fetches the current default-branch HEAD of these five upstream repositories into its separate staging directory. These snapshots can include unreleased changes. A failed fetch stops staging instead of silently using an older checkout. The report records each manifest version, resolved commit, and destination.
+By default, each desktop run fetches the current default-branch HEAD of these five upstream repositories into its separate staging directory. These snapshots can include unreleased changes. A failed fetch stops staging instead of silently using an older checkout. The report records each manifest version, resolved commit, and destination.
+
+For repeatable plugin setup, add an optional top-level `plugin_commits` object to settings. Map registry IDs from the table below to the full, lowercase, 40-character commit hashes recorded in a successful report. For example, set `plugin_commits.dockerManager` to that plugin's recorded commit. Pinned plugins fetch that exact commit and verify the resolved revision; unpinned plugins still fetch upstream HEAD. The plan shows pins, and saved settings snapshots retain them. Invalid IDs/hashes or unavailable commits stop setup; there is no silent fallback to HEAD. Replay still needs network access to fetch the commit and does not pin OS/AUR packages.
 
 Existing user plugin copies, including installations under another directory name, are updated at the next myarch-buildkit login. Replaced files are backed up. A snapshot inventory tracks managed files and hashes; unchanged tracked files removed upstream are backed up and removed at the login boundary. Untracked files and locally modified obsolete files are preserved because they may contain user data. On the first upgrade of an older/unmanaged installation, extra files are preserved until there is a managed baseline. Plugin preferences in `plugin_settings.json` are preserved except for the documented enablement/backend choices. Keep personal source changes separately: plugin code is replaced by upstream code. A user copy overrides an existing system plugin without modifying package-owned files. Edits made after staging block activation until you cancel/restage.
 
@@ -270,7 +334,7 @@ sudo usermod -aG input "$USER"
 
 Check the current session with `id -nG`. Without the permission, Bongo Cat shows a warning and the running-desktop check reports the missing setup. Its idle animation is part of the widget; it does not change system idle or power policy.
 
-The new plugin copies are manual snapshots, with no automatic updates or extra startup services. To change a myarch-buildkit-installed snapshot, cancel it before login or restore its desktop stage from a TTY after logout, then restage with an updated installer. If you prefer DMS-managed plugin updates, remove the restored snapshot's empty folder and install the corresponding registry ID through DMS Settings → Plugins; subsequent myarch-buildkit runs preserve that installation. Existing DMS-managed installations keep their usual update mechanism.
+The staged copies are manual snapshots; myArch-BaseKit installs no background updater or extra plugin startup service. To replace a pending snapshot, restore/cancel that desktop stage and stage it again with the desired pins or current upstream code. Existing DMS-managed copies keep their metadata, but every subsequent myarch-buildkit desktop run still stages its selected upstream snapshots over those copies. Avoid updating the same plugin through DMS while a bundle is pending: later edits can block activation. Keep personal plugin source changes separately.
 
 ### Appearance defaults
 
@@ -280,9 +344,9 @@ Existing personal appearance preferences and previously installed themes are lef
 
 ### Laptop behavior
 
-The laptop stage configures only natural scrolling for pointers/touchpads, Hungarian layout for keyboards verified as built-in by sysfs/udev, and 4/3 scale for the built-in display. It generates a static Hyprland fragment and a small metadata file. An unverified built-in keyboard or display stops setup instead of applying a global keyboard layout or guessing an output.
+The laptop stage configures the selected pointer/touchpad scrolling policy, the layout for keyboards verified as built-in by sysfs/udev, and the built-in display scale. Defaults are natural scrolling enabled, Hungarian (`hu`) layout, and 4/3 scale. It generates a static Hyprland fragment and a small metadata file. An unverified built-in keyboard or display stops setup instead of applying a global keyboard layout or guessing an output.
 
-External keyboard layouts and display rules are not configured. No refresh rate, display switching, power profile, lid action, idle timeout or automatic lock policy is imposed. No laptop background helper is installed. Existing system and DMS preferences govern those behaviors.
+The built-in display fragment retains the observed resolution, refresh rate, layout position and rotation while changing scale. Preflight validates those exact dimensions; incomplete or disabled current-mode evidence stops staging. External keyboard layouts and display rules are not configured. No refresh rate, display switching, power profile, lid action, idle timeout or automatic lock policy is imposed. No laptop background helper is installed. Existing system and DMS preferences govern those behaviors.
 
 When upgrading from an older myarch-buildkit build, its two laptop helper units are disabled at the next desktop login boundary. Previously applied power, logind or idle configuration is not automatically deleted. Use the earlier build's stage report and explicit restoration to undo those earlier changes; packages remain installed.
 
@@ -296,7 +360,7 @@ Installed supported alternatives such as `k6` or `k6-bin` are retained when thei
 
 Dux Shell (DMS) 2.0 keeps the `dms` command and currently uses the `dms-shell` package. It moves config/state/cache from `DankMaterialShell/` to `dms/`, leaving compatibility symlinks. The installer writes directly to the new paths, uses settings schema 42/session schema 7, and configures the new per-dock settings and pins. If old user directories have not migrated yet, start the installed DMS once to let it migrate preferences, then rerun desktop setup. Existing JSON with an older schema must likewise be migrated by DMS first; setup does not relabel unmigrated data.
 
-For newer DMS releases, setup inspects installed schemas. When QML is embedded, it uses a verified release adapter or fetches the installed version's exact upstream tag and pinned shared-schema submodule during staging. Missing required fields or unavailable release sources stop configuration with an error. The installed DMS version/build output is recorded and must still match at login; upgrades after staging require restaging. Plan, check, and login do not fetch plugin or schema sources.
+For newer DMS releases, setup inspects installed schemas, including the supported literal default types and nested bar/dock shapes. Unsupported or ambiguous schema constructs are refused rather than evaluated as JavaScript. When QML is embedded, it uses a verified release adapter or fetches the installed version's exact upstream tag and pinned shared-schema submodule during staging. Missing required fields or unavailable release sources stop configuration with an error. The installed DMS version/build output is recorded and must still match at login; upgrades after staging require restaging. Plan, check, and login do not fetch plugin or schema sources.
 
 Hyprland `.lua` and `.conf` configurations are selected by the active file's format and verified with the installed compositor's `--verify-config`. A newer version number alone does not block setup. This checks syntax/API compatibility, not all runtime desktop behavior.
 
@@ -304,23 +368,23 @@ Cleanup removes Dolphin when Files is available; Alacritty when Ghostty and Hypr
 
 Selected camera diagnostics, Avahi browsers, hardware-topology and Qt/GTK settings launchers are hidden using reversible per-user overrides. Their packages remain installed. Cleanup does not remove every unfamiliar app, purge orphan packages, or uninstall Noctalia itself.
 
-### Latest CachyOS release-candidate kernel
+## Optional CachyOS kernel selection
 
-Kernel selection is opt-in. Add the top-level setting `"kernel_channel": "rc"` to your settings JSON. Allowed values are `unchanged` (the default, preserving the existing full-upgrade behavior), `stable` (select `linux-cachyos`), and `rc` (select `linux-cachyos-rc`). Old settings and saved reports without this field retain `unchanged` behavior. The selected channel is retained in your settings file and saved run snapshots; it does not schedule updates.
+Kernel selection is opt-in and separate from the application package manifest. Add the top-level setting `"kernel_channel": "rc"` to your settings JSON. Allowed values are `unchanged` (the default, preserving the existing full-upgrade behavior), `stable` (select `linux-cachyos`), and `rc` (select `linux-cachyos-rc`). Old settings and saved reports without this field retain `unchanged` behavior. The selected channel is retained in your settings file and saved run snapshots; it does not schedule updates.
 
 “Latest” means the version available from the enabled CachyOS repositories when apply refreshes package databases. The RC package follows mainline development and may contain a release candidate or a release-transition build; the installer does not hardcode a kernel version or promise an upstream release that CachyOS has not packaged. See [CachyOS kernel variants and module support](https://wiki.cachyos.org/features/kernel/).
 
-#### Supported automatic path
+### Supported automatic path
 
 This implementation requires the **active systemd-boot loader**, Secure Boot disabled, and standard Type 1 entries referencing `vmlinuz-PACKAGE` and `initramfs-PACKAGE.img`. The boot partition must be mounted at `/boot`, `/efi`, or `/boot/efi`, with readable images and at least 1 GiB available on both that partition and the filesystem containing `/boot`.
 
-Before opting in, install and boot a stable/LTS fallback using the CachyOS kernel manager. The installer requires an existing, verifiable `linux-cachyos-lts`, `linux-lts`, `linux-cachyos`, or `linux` entry; it never removes that package. An initramfs fallback image of the RC kernel itself is not a separate stable kernel.
+Before opting in, install and boot a stable/LTS fallback using the CachyOS kernel manager. The installer requires an existing, verifiable `linux-cachyos-lts`, `linux-lts`, `linux-cachyos`, or `linux` entry from a different package than the selected target; it never removes that fallback package. In stable mode, `linux-cachyos` cannot serve as its own fallback. Verification reads protected root-owned kernel images as the regular user; it does not require user ownership of system files. An initramfs fallback image of the RC kernel itself is not a separate stable kernel.
 
 GRUB, Limine, rEFInd, unified kernel images, custom entry layouts, enabled/unknown Secure Boot, and DKMS drivers require manual kernel/boot validation. Automatic selection stops before changing installed packages when these conditions cannot be verified. Use the [CachyOS kernel manager](https://wiki.cachyos.org/features/kernel_manager/) and [boot-manager instructions](https://wiki.cachyos.org/configuration/boot_manager_configuration/) for those systems; retain a stable/LTS entry, select the new kernel manually from the boot menu, and test it before changing the default. Do not disable Secure Boot simply to bypass this check.
 
 NVIDIA and ZFS installations require the corresponding prebuilt target-kernel modules from CachyOS. The installed NVIDIA open/closed driver family is retained. Package dependency resolution must succeed, and module vermagic must match the installed kernel before boot activation. DKMS builds and ambiguous/legacy NVIDIA providers are deliberately not inferred to be compatible.
 
-#### Install, trial boot, then promote
+### Install, trial boot, then promote
 
 After editing your settings file:
 
@@ -352,15 +416,13 @@ Promotion requires that systemd-boot reports the selected entry as the current b
 
 Subsequent package runs with this channel update the kernel from the repositories and return the default to the fallback for a fresh trial/promotion cycle. `stable` follows the same process with `linux-cachyos`; `unchanged` stops selecting a channel but does not uninstall the RC package or prevent normal pacman upgrades to it.
 
-#### Recovery and validation limits
+### Kernel recovery and validation limits
 
 If a trial fails, reboot and select the stable/LTS entry. A one-time boot does not make the RC entry the persistent default, but it is not a watchdog and cannot recover a hung machine by itself. After promotion, use the boot menu to select the fallback if needed. Keep that entry and package installed. Configuration restore does **not** roll back kernel packages, repository upgrades, or bootctl default/one-time selections.
 
-Automated tests cover settings compatibility, version resolution, downgrade refusal, missing drivers, boot-space/mount checks, stale images, failed transactions, repeated upgrades, fallback retention, and promotion guards using an isolated filesystem and simulated commands. Installation and reboot still require validation in a CachyOS VM and on target hardware; this development build is not claimed to have passed those checks.
+Automated tests cover settings compatibility, version resolution, downgrade refusal, missing drivers, boot-space/mount checks, stale images, failed transactions, repeated upgrades, fallback retention, and promotion guards using an isolated filesystem and simulated commands. Opt-in [target acceptance tests](../CONTRIBUTING.md#target-acceptance-tests) check staged/active sessions and fallback/trial/promoted boot state using real read-only probes. Installation and reboot still require validation in a CachyOS VM and on target hardware; this development build is not claimed to have passed those checks.
 
-<!-- pagebreak -->
-
-## 6. Pending desktop configuration and reports
+## Pending desktop configuration and reports
 
 ### Separate files and one startup method
 
@@ -405,9 +467,7 @@ Standalone `check` prints findings without creating a run. Use `apply --stage ve
 
 There is no `status` subcommand. Use `check` for a readable current summary, `check --details` for extended findings or the saved `report.json` for a run's history.
 
-<!-- pagebreak -->
-
-## 7. Troubleshooting, retry and restore
+## Troubleshooting, retry and restore
 
 ### Start with the reported failure
 
@@ -463,15 +523,19 @@ Use the exact restore command printed for the original run or recorded in its `r
 
 Supported restore stages are `defaults`, `shell`, `containers`, `laptop`, `desktop`, `greeter` and `cleanup`. For new runs, supply the absolute path to the **top-level run folder containing `report.json`**; the installer selects the named profile and its internal backups. Do not add `apply`, `--configure-only` or `--allow-live-desktop` to a restore command. Restoring an unapplied stage cancels its queue entry and restores any setup-time system changes. Cancel the dependent desktop stage before its pending laptop stage. To restore files already applied at login, first log out of graphical sessions and run the restore command from a TTY; the installer refuses to overwrite a running desktop. Ordinary defaults, shell, containers and cleanup restoration can run independently; applied desktop/laptop/greeter changes require logout when their report includes desktop or login changes.
 
-This rename changes configuration/state paths, the login-session entry, system backup paths, and the unified report format identifier. Existing installations and pending runs are not migrated automatically. Use the original executable and session to complete or restore runs created before the rename; keep their reports and backup files. Do not mix pre-rename pending runs with a new installation. `--restore-stage` also understands the earlier `desktop-report.json`, `shell-report.json`, `podman-report.json` and `cleanup-report.json` formats when those named files identify the selected stage. The earlier profile report format remains supported for desktop/laptop/greeter restoration. Keep the full original run and backup files.
+For runs created before the project was renamed to myArch-BaseKit, use the original executable and session to complete or restore them. Configuration/state paths, the login-session entry, system backup paths, and the unified report identifier changed with that rename; pending runs are not migrated automatically. Keep their original reports and backups, and resolve them before starting a new installation.
+
+`--restore-stage` also understands the earlier `desktop-report.json`, `shell-report.json`, `podman-report.json` and `cleanup-report.json` formats when those named files identify the selected stage. The earlier profile report format remains supported for desktop/laptop/greeter restoration. Keep the full original run and backup files.
 
 `--restore-profile /absolute/run/folder` resolves a top-level run to its **desktop** profile, including the unified format. It does not restore every stage or the root executable backup. For shell, defaults, containers, laptop, greeter or cleanup, use `--restore-stage` with the new run root or the older run's exact stage folder. Stages can be restored independently; an unapplied desktop still depends on its pending laptop stage, so cancel desktop first.
 
+Restore and missing-reference cancellation use their recovery journals without loading current setup settings; a broken or obsolete settings file does not block recovery. Journal, platform and path safety checks still apply. The privileged helper is shared recovery infrastructure and remains installed after individual stage restores. Recovery verifies its capabilities and can repair a missing or older helper using a separate support journal.
+
+A partial restore retains ownership protection for files it cannot restore, so a subsequent setup still refuses to overwrite those edits. Interrupted restores recognize the exact original bytes already restored and can resume; changed files and damaged backups still require manual review.
+
 Restore is not a system rollback: package upgrades stay installed; removed packages are not reinstalled; cleanup restore restores launcher/configuration changes only. Restoring Podman configuration does not automatically disable an API socket you opted into. Files modified after setup are preserved and reported as conflicts. Restoration of an applied desktop preserves later edits and can be partial. When restoring reports from an older themed build, a theme referenced by subsequently edited DMS settings is retained. Desktop/greeter restores can change the next login; review their reports before using them.
 
-<!-- pagebreak -->
-
-## 8. Limits and a short maintenance note
+## Support and validation limits
 
 ### Practical limits
 
@@ -484,36 +548,29 @@ Restore is not a system rollback: package upgrades stay installed; removed packa
 
 ### Current validation baseline
 
-This guide describes build `v0.3.0`. The non-root suite skips five privileged-operation tests; run `go test ./...` and `go vet ./...` for current results. Tests also cover latest-plugin refresh, obsolete-file restoration, Dux 2.0 paths/dock pins, future schema versions, and version changes between staging and login. CI also runs the five privileged-operation tests as root against temporary directories on an ephemeral runner. Real system operations and greeter setup still need target-machine testing. Tests cover CLI/settings validation, package selection and interactive review, readable check/apply output, JSON error reporting, unified reports and settings snapshots, separate staging, login ordering, payload/baseline conflicts, interrupted writes, DMS property merging, missing pending references, cleanup blocking, explicit and legacy restoration, source-preserving JSONC/MIME edits, personal appearance and symlink preservation, internal-only keyboard targeting, the three static laptop settings, staged fragment dependencies, plugin snapshots/preferences/loading, shell and container integrations, clipboard checks and screenshot handling. The [project README](../README.md) lists the Go test, vet and executable-build commands.
+| Validation | What it establishes |
+| --- | --- |
+| Go tests and race checks | CLI/settings behavior, package decisions, staged activation, conflict handling, recovery, desktop adapters, and command lifecycle behavior in isolated fixtures |
+| Privileged tests in CI | Root file-operation and recovery contracts in temporary directories on an ephemeral runner |
+| Native Hyprland validation and DMS schema inspection | The staged configuration matches the inspected installed software |
+| Opt-in target acceptance test | Read-only checks of a real staged/active session and optional fallback/trial/promoted boot state |
+| Manual target checks | Login/reboot, graphics, input, display hotplug, audio, networking, and suspend/resume |
 
-A prior build was exercised on a target machine, applying staged configuration before Hyprland startup and loading all five DMS plugins. This build’s Dux 2.0 and latest-plugin changes have automated coverage and upstream-source checks, but still need a target-machine login test. Natural-scrolling verification and suspend/resume issues remain unresolved; this is not a complete hardware validation. Test the myarch-buildkit session, DMS, its five plugins, built-in display scaling, keyboard layout, natural scrolling and suspend/resume on the target machine before treating setup as complete. Native verification requires Hyprland config-validation support and an inspected DMS schema. Verified embedded-QML adapters cover DMS 1.6.2 (18/4) and Dux 2.0.0 (42/7); other versions require inspectable release or installed source.
+Embedded-QML adapters have source-pinned fixtures for DMS 1.6.2 (settings/session schemas 18/4) and Dux 2.0.0 (42/7). Other versions require inspectable installed or release sources; unfamiliar schemas are checked rather than assumed compatible.
 
-### Maintaining the native Go version
+A prior build was exercised on a target machine and loaded all five plugins after staged activation. This build's Dux 2.0, plugin, recovery, and kernel changes have automated coverage but still require a fresh target-machine login/reboot test. Previous natural-scrolling verification and suspend/resume observations remain unresolved; include both in manual acceptance. No successful unit-test run removes those limitations.
 
-Keep the compiled executable, this guide and the matching Go source project together with a known-working version and its run reports. The [project README](../README.md) documents the standard Go build and test commands. Build with Go 1.23 or newer; the compiled installer needs no Go or Python runtime on the target. Do not regenerate this Go version with the earlier Bash/Python build scripts.
+For exact local and CI checks, fixtures, and the disposable-VM procedure, see [Contributing](../CONTRIBUTING.md#validation) and [target acceptance tests](../CONTRIBUTING.md#target-acceptance-tests).
 
-Use `--help`, `--settings-template` and `plan` for the current command reference. `--version` prints the build identifier and executable SHA256. The run's `report.json` records the build, executed binary and its hash.
+### Keeping a useful recovery record
 
-The single startup method follows [DMS's documented compositor-managed Hyprland launch](https://danklinux.com/docs/dankmaterialshell/managing#manual-launch). The installer still verifies the installed schema and configuration format rather than assuming arbitrary future versions are compatible.
+Keep a known-working executable, its matching source/version, the run report, and the internal backups it references. `--version` prints the build identifier and executable SHA256; apply reports record the same provenance. The report alone does not contain the backed-up file contents.
 
-The requested plugin IDs and repositories follow the [DMS registry](https://github.com/AvengeMedia/dms-plugin-registry). Plugins use DMS default styling; this build adds no theme setup.
+Use `--help`, `--settings-template`, and `plan` to inspect the executable you actually downloaded. Build and distribution commands belong in the [README](../README.md#build-from-source); maintainers should follow the [release procedure](../CONTRIBUTING.md#release-procedure).
 
-Published Linux x86-64 downloads and checksum verification are described in the [README](../README.md#download-a-release). Maintainers should follow the [release procedure](../CONTRIBUTING.md#release-procedure).
+## Package reference
 
-From the repository root, build from source with Go 1.23 or newer:
-
-```bash
-go test ./...
-go vet ./...
-go build -o bin/myarch-buildkit ./cmd/myarch-buildkit
-./bin/myarch-buildkit --version
-```
-
-<!-- pagebreak -->
-
-## 9. Package reference
-
-This reference follows `PackageManifest()` in `cmd/myarch-buildkit/packages.go`. All four groups are enabled by default. Core must remain enabled; utilities, development, and containers can be disabled through the package-group settings described in section 4. These are direct package requirements, not a list of every transitive dependency that the package manager may install.
+This reference follows `PackageManifest()` in `cmd/myarch-buildkit/packages.go`. All four groups are enabled by default. Core must remain enabled; utilities, development, and containers can be disabled through the package-group settings described under [settings](#settings-and-optional-flags). These are direct package requirements, not a list of every transitive dependency that the package manager may install.
 
 Repository candidates are tried in the listed order unless an installed supported variant has a verified update source. AUR candidates are fallbacks, also in order; alternatives are not all installed together. Availability depends on the enabled repositories at apply time. An em dash means no candidate or command is declared in that column. Commands identify the tools checked by the installer, not every executable included in a package.
 
@@ -650,4 +707,4 @@ Podman and kubectl appear in both their optional groups and core because the DMS
 
 AUR operations use a working `paru` or `yay`. If neither works, the installer attempts to install or repair repository `paru`, then `paru-bin` as the next candidate. `paru-bin` is a prebuilt alternative providing the same helper command. These helpers resolve and build selected AUR packages; they are conditional infrastructure outside the manifest above. The initial package upgrade also ensures `base-devel` and `git` are present.
 
-CachyOS and an already installed, running Hyprland are prerequisites. Hyprland receives normal repository updates during the full-system upgrade but is not a manifest-selected installation target. Optional kernel selection is separate from the application manifest; see [RC kernel support](#latest-cachyos-release-candidate-kernel).
+CachyOS and an already installed, running Hyprland are prerequisites. Hyprland receives normal repository updates during the full-system upgrade but is not a manifest-selected installation target. Optional kernel selection is separate from the application manifest; see [RC kernel support](#optional-cachyos-kernel-selection).

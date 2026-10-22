@@ -108,7 +108,7 @@ func desktopContext(t *testing.T) (*Context, *desktopRunner) {
 		"hyprland_version": "Hyprland 0.54.3",
 		"hyprland_binary":  "/usr/bin/Hyprland",
 		"input_root":       inputRoot,
-		"monitors":         []map[string]any{{"name": "eDP-1", "width": 2880, "height": 1800}, {"name": "DP-1", "width": 2560, "height": 1440}},
+		"monitors":         []map[string]any{{"name": "eDP-1", "width": 2880, "height": 1800, "refreshRate": 120.0, "x": 0, "y": 0}, {"name": "DP-1", "width": 2560, "height": 1440}},
 		"devices":          map[string]any{"keyboards": []map[string]any{{"name": "internal-keyboard"}, {"name": "usb-keyboard"}, {"name": "bluetooth-keyboard"}}},
 	}
 	for _, name := range []string{"com.mitchellh.ghostty", "org.gnome.Nautilus", "code"} {
@@ -304,16 +304,7 @@ func TestDesktopInstalledSourceRequiresCompleteVerifiedSchema(t *testing.T) {
 	storagePut(t, filepath.Join(root, "Common/settings/SessionSpec.js"), "pinnedApps: [],wallpaperPath: ''\n")
 	_, err := VerifyDMSSchema(c)
 	storageRequireError(t, err, "unverified")
-	settings := "barConfigs: [],screenPreferences: {}\n"
-	for key := range DMSSettings {
-		settings += key + ": null,\n"
-	}
-	session := "pinnedApps: [],wallpaperPath: ''\n"
-	for key := range DMSSession {
-		session += key + ": null,\n"
-	}
-	storagePut(t, filepath.Join(root, "Common/settings/SettingsSpec.js"), settings)
-	storagePut(t, filepath.Join(root, "Common/settings/SessionSpec.js"), session)
+	installDMSSchemaFixture(t, root, "1.6.2")
 	verified, err := VerifyDMSSchema(c)
 	if err != nil || verified != root {
 		t.Fatalf("%s %v", verified, err)

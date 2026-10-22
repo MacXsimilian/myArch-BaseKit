@@ -1,11 +1,48 @@
 package main
 
 import (
+	"encoding/json"
 	"math"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestPluginCommitSettings(t *testing.T) {
+	commit := strings.Repeat("a", 40)
+	for _, item := range []struct {
+		pins  map[string]string
+		valid bool
+	}{
+		{nil, true}, {map[string]string{}, true},
+		{map[string]string{"dockerManager": commit}, true},
+		{map[string]string{"unknown": commit}, false},
+		{map[string]string{"dockerManager": "main"}, false},
+		{map[string]string{"dockerManager": strings.Repeat("A", 40)}, false},
+		{map[string]string{"dockerManager": ""}, false},
+	} {
+		value := map[string]any{}
+		if item.pins != nil {
+			value["plugin_commits"] = item.pins
+		}
+		data, err := json.Marshal(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(t.TempDir(), "settings.json")
+		if err = os.WriteFile(path, data, 0600); err != nil {
+			t.Fatal(err)
+		}
+		got, err := LoadSettings(path)
+		if (err == nil) != item.valid {
+			t.Fatalf("pins %v: %v", item.pins, err)
+		}
+		if item.valid && len(item.pins) > 0 && got.PluginCommits["dockerManager"] != commit {
+			t.Fatal("pin not retained")
+		}
+	}
+}
 
 func TestSettingsPartialMergePreservesExplicitFalse(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")

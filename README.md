@@ -1,97 +1,116 @@
 # myArch-BaseKit
 
-An opinionated workstation setup tool for development, DevOps, SRE, and platform engineering. The `myarch-buildkit` command configures packages, application defaults, shell integrations, containers, and a Hyprland desktop with Dux Shell (formerly Dank Material Shell).
+An opinionated workstation setup tool for **CachyOS + Hyprland**. The `myarch-buildkit` command installs development tools, configures everyday applications, and stages a Hyprland desktop with Dux Shell (DMS) for your next login.
 
-**Supported base:** native CachyOS on Linux x86-64, with Hyprland already installed and running. This tool configures an existing system; it does not install the operating system.
+Preview the changes, choose your settings, apply them, and keep a report with configuration backups and recovery commands.
 
-## Build and preview
+[Get started](#quick-start) · [User guide](docs/user-guide.md) · [Package reference](docs/user-guide.md#package-reference) · [Recovery](docs/user-guide.md#troubleshooting-retry-and-restore) · [Contributing](CONTRIBUTING.md)
 
-Install Go 1.23 or newer, then run from the repository root:
+## What it sets up
 
-```bash
-go build -o bin/myarch-buildkit ./cmd/myarch-buildkit
-./bin/myarch-buildkit --version
-./bin/myarch-buildkit plan
-```
+| Area | Included |
+| --- | --- |
+| Desktop | Hyprland profile, DMS Frame Mode, top bar, bottom dock, and a dedicated login session |
+| Plugins | Docker Manager, Kubernetes, Emoji & Unicode Launcher, Bongo Cat, and ClipBoard+ |
+| Applications | Ghostty, GNOME Files, VS Code, Bitwarden, Obsidian, Firefox, and VLC |
+| Development | Git tools, Go, uv, mise, Kubernetes, infrastructure tools, and modern CLI utilities |
+| Containers | Podman, Compose, kind integration, and rootless prerequisite checks |
+| Laptop | Internal keyboard layout, internal display scale, and natural scrolling |
+| Recovery | Per-run reports, configuration backups, conflict-aware restore, and explicit retry commands |
 
-The preview does not change the system. Read the [user guide](docs/user-guide.md) before applying the plan, especially the default Hungarian internal keyboard layout, 4/3 display scaling, and next-login desktop staging.
+Application defaults, packages, and shell integrations take effect during setup. Desktop, plugin, and laptop files are staged separately and applied before Hyprland starts at the next **myarch-buildkit** login. DankGreeter changes take effect at the next boot.
 
-With GNU Make installed, `make build` builds the executable and `make checksum` also generates `bin/SHA256SUMS`. Verify it with `cd bin && sha256sum -c SHA256SUMS`.
+## Requirements and project status
 
-## Version policy
+- **Native CachyOS, Linux x86-64, and an already installed, working Hyprland session.** This project configures an existing system; it does not install the OS.
+- An ordinary desktop user with `sudo` access, internet access, and working package repositories. Run setup from an interactive terminal inside Hyprland, without `sudo` before the command.
+- Review the defaults: **Hungarian (`hu`) internal keyboard**, **4/3 internal display scale**, and **natural scrolling enabled**. All four package groups are enabled initially.
 
-Package setup upgrades the enabled repositories and selected AUR packages to their available versions. Desktop setup refreshes all five plugins from their upstream default branches, records exact commits, and stages updates with backups for the next login. Plugin preferences are preserved.
-
-Dux Shell 2.0 is supported, including its `dms/` data directories and new dock settings. Newer shell releases are checked against their installed schemas or exact upstream release sources. Hyprland configuration must pass native validation; there is no fixed release-number ceiling. See the [update guide](docs/user-guide.md#updates-and-cleanup) for migration and recovery details.
-
-Kernel selection is opt-in through `kernel_channel: "rc"` or `"stable"` in settings. It retains a validated stable/LTS fallback and supports explicit trial boot and promotion on systemd-boot. Other boot layouts, Secure Boot, and DKMS need manual validation. See the [kernel guide](docs/user-guide.md#latest-cachyos-release-candidate-kernel) for requirements and commands. VM and hardware boot testing remain outstanding.
+The project is in **0.x development**. Automated checks cover setup and recovery logic; this build still needs real CachyOS login, reboot, and hardware validation. Configuration restore retains package upgrades and is not a complete system rollback. Read the [support limits](docs/user-guide.md#support-and-validation-limits) before applying it to a workstation you depend on.
 
 ## Download a release
 
-Download `myarch-buildkit-linux-x86_64.tar.gz` and `SHA256SUMS` from [GitHub Releases](https://github.com/MacXsimilian/myArch-BaseKit/releases). In the download directory, verify the archive before extracting it into a separate directory:
+Download `myarch-buildkit-linux-x86_64.tar.gz` and `SHA256SUMS` from [GitHub Releases](https://github.com/MacXsimilian/myArch-BaseKit/releases). From the directory containing both downloads:
 
 ```bash
 sha256sum -c SHA256SUMS
-mkdir -p myarch-buildkit-release
+mkdir myarch-buildkit-release
 tar -xzf myarch-buildkit-linux-x86_64.tar.gz -C myarch-buildkit-release
 cd myarch-buildkit-release
 sha256sum -c SHA256SUMS
 ./myarch-buildkit --version
-./myarch-buildkit plan
 ```
 
-The outer checksum verifies the archive; the checksum inside verifies the executable. The archive includes the license, README, contributing guide, and user guide. Builds target Linux x86-64 with CGO disabled to avoid a host libc dependency.
+The outer checksum verifies the archive; the inner checksums verify the executable, documentation, license, and `BUILD-INFO` metadata. Release builds use the compiler pinned in `.go-version` and need no Go, Python, or host libc runtime. Checksum verification checks file integrity; it is not a publisher signature.
 
-Stable version tags publish a release only after the build, tests on minimum and stable Go, privileged-operation tests, and automation lint checks pass. See [the release procedure](CONTRIBUTING.md#release-procedure).
+### Build from source
 
-## Download a development build
-
-The [Build and test workflow](https://github.com/MacXsimilian/myArch-BaseKit/actions/workflows/build.yml) also runs on branch pushes, pull requests, and manual requests. Open a run and download **myarch-buildkit-linux-x86_64** from **Artifacts**. Unzip it, then use the verification and extraction commands above. Artifacts expire after 30 days.
-
-Builds run independently of tests, so a development artifact can be available even when another check failed. Check the entire run before using it. Branch and manual runs do not publish releases.
-
-## Versioning
-
-The program uses [semantic versioning](https://semver.org/), displayed as `vMAJOR.MINOR.PATCH`, currently **v0.3.0**. Use `v0.3.1` for a compatible bug fix and `v0.4.0` for the next feature release. The `0.x` series is initial development; stable compatibility starts at `v1.0.0`.
-
-The default version is defined in `cmd/myarch-buildkit/version.go`. A GitHub Actions build triggered by a tag such as `v0.3.0` embeds that tag in the executable and its run reports. Branch, pull-request, and ordinary local builds use the source version. Version numbers are chosen deliberately, not incremented on every build.
-
-## Documentation
-
-- [User guide](docs/user-guide.md): setup, settings, commands, verification, and recovery.
-- [Package reference](docs/user-guide.md#9-package-reference): every package, its purpose, commands, optional group, and repository/AUR alternatives.
-- [Contributing](CONTRIBUTING.md): development workflow, code organization, and validation.
-- [License](LICENSE): MIT.
-
-## Repository layout
-
-```text
-.
-├── .github/
-│   └── workflows/build.yml # Builds, validation, and tagged releases
-├── cmd/
-│   └── myarch-buildkit/   # Go command and adjacent unit tests
-├── docs/
-│   └── user-guide.md     # Full setup and operation guide
-├── bin/                 # Generated executable and checksum; ignored by Git
-├── .editorconfig        # Shared formatting conventions
-├── .gitignore           # Local settings, secrets, and generated output
-├── CONTRIBUTING.md
-├── LICENSE
-├── Makefile             # Build, test, vet, format, and checksum targets
-├── README.md
-└── go.mod
-```
-
-Tests live beside the code they exercise, following Go conventions. The command remains one package because its setup stages share internal types, state, and recovery logic.
-
-## Validation
+Use Go 1.23 or newer and GNU Make. From a checkout:
 
 ```bash
-go test ./...
-go vet ./...
+make build
+./bin/myarch-buildkit --version
+cd bin
 ```
 
-Equivalent Make targets are `make test`, `make vet`, and `make check` (formatting, tests, and vet).
+Without Make, use `go build -trimpath -o bin/myarch-buildkit ./cmd/myarch-buildkit`. The remaining examples assume your working directory contains the executable. See [Contributing](CONTRIBUTING.md) for tests, packaging, and release builds.
 
-The non-root suite skips five privileged-operation tests; CI runs those separately as root in temporary directories. Automated checks do not establish target-machine readiness; see the user guide for hardware validation limits.
+## Quick start
+
+### 1. Review your settings and plan
+
+Generate a settings file using a new filename, then edit the keyboard, scale, and package groups for your machine:
+
+```bash
+./myarch-buildkit --settings-template > myarch-buildkit-settings.json
+./myarch-buildkit plan --settings myarch-buildkit-settings.json
+```
+
+`plan` makes no changes and performs no network requests. Add `--details` to inspect package alternatives. Keep this settings file for later checks and updates; [settings and optional flags](docs/user-guide.md#settings-and-optional-flags) explains every choice.
+
+### 2. Apply, then log in
+
+```bash
+./myarch-buildkit apply --all --settings myarch-buildkit-settings.json
+```
+
+Review the interactive package prompts. **Exit code 3 means configuration is ready for login**, not a failed installation. Save your work, log out, and select **myarch-buildkit** in the login session chooser. An ordinary Hyprland login leaves the pending bundle untouched.
+
+### 3. Check and finish
+
+From a terminal in the new session, return to the executable's directory:
+
+```bash
+./myarch-buildkit check --settings myarch-buildkit-settings.json
+```
+
+After checks pass, finish cleanup:
+
+```bash
+./myarch-buildkit apply --stage verify --stage cleanup \
+  --settings myarch-buildkit-settings.json
+```
+
+Bongo Cat typing animation requires a separate [input permission step](docs/user-guide.md#included-dms-plugins). Open a new terminal for shell changes. Save work before rebooting to test the greeter, then check the display, keyboard, audio, networking, and suspend/resume on your hardware.
+
+Each apply run prints the path to `myarch-buildkit-runs/RUN_ID/report.json` under your working directory. Keep that report and the internal state/backups it references. If a step fails, use its printed retry or restore command; see [Troubleshooting, retry and restore](docs/user-guide.md#troubleshooting-retry-and-restore).
+
+## Updates and reproducibility
+
+The packages stage performs a full upgrade against enabled repositories and updates selected AUR packages. Desktop runs fetch the five plugins from their upstream default branches and record exact commits. Optional [`plugin_commits`](docs/user-guide.md#included-dms-plugins) settings pin individual plugins to those commits; they do not pin OS packages.
+
+Kernel selection is opt-in: the default `kernel_channel: "unchanged"` keeps normal package upgrade behavior. The optional stable/RC workflow requires a distinct, verified stable/LTS fallback and a supported systemd-boot layout, with explicit trial boot and promotion. Read the [kernel guide](docs/user-guide.md#optional-cachyos-kernel-selection) before enabling it.
+
+DMS compatibility is checked against installed or exact release schemas, and Hyprland configuration must pass native validation. A successful older setup does not establish compatibility with every future upstream version.
+
+## Development builds and contributing
+
+The [Build and test workflow](https://github.com/MacXsimilian/myArch-BaseKit/actions/workflows/build.yml) produces the **myarch-buildkit-linux-x86_64** artifact for branch pushes, pull requests, and manual runs. Unzip it and follow the release verification commands above. Artifacts expire after 30 days. Read the entire workflow result: an available development artifact can coexist with a failed test job.
+
+To contribute, start with the [development workflow](CONTRIBUTING.md#development-workflow). Include a focused change, relevant validation, and documentation for any changed user behavior. For a bug report, include `--version`, the failing command, and relevant redacted report fields; never post credentials or private configuration.
+
+The source version is defined in [`version.go`](cmd/myarch-buildkit/version.go). Make-built development binaries include the Git revision and a dirty marker when applicable; release binaries use the exact `vMAJOR.MINOR.PATCH` tag. Compatibility is still evolving during the 0.x series. Maintainers should follow the [release procedure](CONTRIBUTING.md#release-procedure).
+
+## License
+
+[MIT](LICENSE). Source fixtures retain their upstream license notices.

@@ -229,7 +229,14 @@ func planTextWidth(o Options, s Settings, stages []string, color bool, width int
 		v.field("Natural scrolling", scroll+" for pointers and touchpads")
 		if selected("desktop") {
 			v.field("Plugins", "Docker Manager · Kubernetes · Emoji & Unicode Launcher · Bongo Cat · ClipBoard+")
-			v.note("Refresh plugin code from the latest upstream branches; back up existing files and preserve preferences.")
+			if len(s.PluginCommits) == 0 {
+				v.note("Refresh plugin code from the latest upstream branches; back up existing files and preserve preferences.")
+			} else {
+				v.note("Replay the configured exact commits for pinned plugins; refresh unpinned plugins from upstream. Back up existing files and preserve preferences.")
+				for _, id := range sortedMapKeys(s.PluginCommits) {
+					v.field(id, s.PluginCommits[id])
+				}
+			}
 		}
 		v.note("Files are staged separately and applied before Hyprland and DMS start.")
 		if !selected("desktop") {

@@ -23,16 +23,17 @@ var RequestedPlugins = []Plugin{
 	{ID: "clipboardPlus", Repo: "Dadangdut33/dms-plugins", Subdir: "ClipboardPlus"},
 }
 
-// Fetch the current default branch and retain the resolved commit.
+// Fetch the selected immutable commit, or the current default branch by default.
 // Checkout data is never read from an existing (possibly edited) working tree.
 func FetchPlugin(c *Context, p Plugin) (string, string, error) {
+	ref := pluginRef(c, p.ID)
 	destination := filepath.Join(c.RunDir, "plugin-downloads", p.ID)
 	if err := securePath(destination, true); err != nil {
 		return "", "", err
 	}
 	for _, args := range [][]string{
 		{"git", "init", destination},
-		{"git", "-C", destination, "fetch", "--depth", "1", "https://github.com/" + p.Repo, "HEAD"},
+		{"git", "-C", destination, "fetch", "--depth", "1", "https://github.com/" + p.Repo, ref},
 		{"git", "-C", destination, "checkout", "--detach", "--force", "FETCH_HEAD"},
 		{"git", "-C", destination, "clean", "-fdx"},
 	} {
@@ -48,7 +49,17 @@ func FetchPlugin(c *Context, p Plugin) (string, string, error) {
 	if !regexp.MustCompile(`^[0-9a-f]{40}$`).MatchString(commit) {
 		return "", "", fmt.Errorf("invalid upstream plugin revision: %s", p.ID)
 	}
+	if ref != "HEAD" && commit != ref {
+		return "", "", fmt.Errorf("plugin %s resolved to %s instead of requested commit %s", p.ID, commit, ref)
+	}
 	return filepath.Join(destination, p.Subdir), commit, nil
+}
+
+func pluginRef(c *Context, id string) string {
+	if commit := c.Settings.PluginCommits[id]; commit != "" {
+		return commit
+	}
+	return "HEAD"
 }
 
 func PluginManifest(root, expectedID string) (map[string]any, error) {
@@ -298,11 +309,16 @@ func ConfigurePlugins(c *Context) error {
 		if err := stageObsoletePluginFiles(c, plugin, destination, newFiles); err != nil {
 			return err
 		}
+		policy := "latest"
+		if pluginRef(c, plugin.ID) != "HEAD" {
+			policy = "pinned"
+		}
 		records = append(records, map[string]any{
 			"id":          plugin.ID,
-			"status":      "staged latest snapshot",
+			"status":      "staged " + policy + " snapshot",
 			"repo":        "https://github.com/" + plugin.Repo,
-			"ref":         "HEAD",
+			"ref":         pluginRef(c, plugin.ID),
+			"policy":      policy,
 			"commit":      commit,
 			"version":     manifest["version"],
 			"updated":     updating,
@@ -313,7 +329,7 @@ func ConfigurePlugins(c *Context) error {
 		return err
 	}
 	c.Report["plugins"] = records
-	c.Note("Five DMS plugins are staged for next login; latest upstream plugin code will replace existing copies with backups; preferences are preserved.")
+	c.Note("Five DMS plugins are staged for next login; selected upstream snapshots replace existing copies with backups; preferences are preserved. The report records latest/pinned policies and exact commits.")
 	c.Note("Bongo Cat needs input-group membership to react to typing. See the guide for its explicit permission step.")
 	return nil
 }

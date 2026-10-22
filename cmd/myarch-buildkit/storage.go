@@ -20,8 +20,9 @@ func hashBytes(data []byte) string {
 
 func pathID(path string) string { return hashBytes([]byte(path)) }
 
-// securePath refuses symlinks and files another user can replace. Missing files
-// are accepted only when their nearest existing parent belongs to this user.
+// securePath refuses symlinks and replaceable ancestry. Trusted root-owned
+// ancestors and sticky shared directories are allowed; the destination and its
+// nearest existing parent must still be private to the current user.
 func securePath(path string, missing bool) error {
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
 		return fmt.Errorf("unsafe path: %s", path)
@@ -30,6 +31,11 @@ func securePath(path string, missing bool) error {
 		info, err := os.Lstat(item)
 		if err == nil && info.Mode()&os.ModeSymlink != 0 {
 			return fmt.Errorf("unsafe symlink: %s", item)
+		}
+		if err == nil && item != path {
+			if err := secureAncestor(item, info); err != nil {
+				return err
+			}
 		}
 		if err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
@@ -78,6 +84,19 @@ func securePath(path string, missing bool) error {
 		return err
 	}
 	return ownedInfo(parent, parentInfo)
+}
+
+func secureAncestor(path string, info os.FileInfo) error {
+	st, ok := info.Sys().(*syscall.Stat_t)
+	if !ok || !info.IsDir() || int(st.Uid) != os.Getuid() && st.Uid != 0 {
+		return fmt.Errorf("untrusted path ancestor: %s", path)
+	}
+	// Sticky directories prevent other users from replacing a trusted child.
+	// Every child in the chain is checked separately for trusted ownership.
+	if info.Mode().Perm()&0022 != 0 && info.Mode()&os.ModeSticky == 0 {
+		return fmt.Errorf("writable-by-others path ancestor: %s", path)
+	}
+	return nil
 }
 
 func ownedInfo(path string, info os.FileInfo) error {
@@ -298,6 +317,7 @@ func (c *Context) backup(path string) (map[string]any, error) {
 		record["backup"] = saved
 		record["mode"] = int(info.Mode().Perm())
 		record["sha256"] = hash
+		record["original_sha256"] = hash
 	}
 	appendRecord(c.Report, "file_changes", record)
 	return record, c.Save()
@@ -480,7 +500,10 @@ func RestoreContext(c *Context) error {
 	}
 	c.Report = report
 	c.ensureReport()
-	records := reportRecords(report, "file_changes")
+	records, err := validatedFileRecoveryRecords(report["file_changes"])
+	if err != nil {
+		return err
+	}
 	needLogout := len(reportRecords(report, "login_service_changes")) > 0
 	ordinaryStage := contains([]string{"defaults", "shell", "containers", "cleanup"}, c.Options.RestoreStage)
 	if !ordinaryStage {
@@ -526,23 +549,53 @@ func RestoreContext(c *Context) error {
 			}
 		}
 	}
-	for i := len(records) - 1; i >= 0; i-- {
-		record := records[i]
+	// An ownership marker protects later edits to its target. Restore the target
+	// first, and retain the marker when the target conflicts or is unavailable.
+	markers := map[string]map[string]any{}
+	markerTargets := map[string]string{}
+	byPath := map[string]map[string]any{}
+	for _, record := range records {
+		byPath[str(record["path"])] = record
+	}
+	for _, record := range records {
+		path := str(record["path"])
+		expected := filepath.Join(stateRoot(c), "managed-files", pathID(path)+".json")
+		if marker := byPath[expected]; marker != nil {
+			markers[path] = marker
+			markerTargets[expected] = path
+		}
+	}
+	restoreRecord := func(record map[string]any) bool {
 		if boolValue(record["restored"]) {
-			continue
+			return true
 		}
 		path := str(record["path"])
 		delete(record, "retained_dependency")
 		if retained[path] {
 			record["retained_dependency"] = settings
 			failures = append(failures, "retained theme referenced by changed DMS settings: "+path)
-			continue
+			return false
 		}
 		if err := restoreFile(record); err != nil {
 			failures = append(failures, err.Error())
-			continue
+			return false
 		}
 		record["restored"] = true
+		return true
+	}
+	for i := len(records) - 1; i >= 0; i-- {
+		record := records[i]
+		path := str(record["path"])
+		if _, marker := markerTargets[path]; marker {
+			continue
+		}
+		if restoreRecord(record) {
+			if marker := markers[path]; marker != nil {
+				restoreRecord(marker)
+			}
+		} else if marker := markers[path]; marker != nil {
+			marker["retained_dependency"] = path
+		}
 	}
 	if err := RestoreGreeter(c); err != nil {
 		failures = append(failures, err.Error())
@@ -561,18 +614,11 @@ func RestoreContext(c *Context) error {
 		}
 	}
 	restoreExternal(c, &failures)
-	// Legacy restores can bootstrap this helper while processing old records.
-	// Restore it last, after every operation that still needs root access.
-	if len(failures) == 0 {
-		for _, record := range reversedRecords(reportRecords(report, "system_changes")) {
-			if record["path"] != systemBinary || boolValue(record["restored"]) {
-				continue
-			}
-			if err := RestoreSystem(c, record); err != nil {
-				failures = append(failures, err.Error())
-			} else {
-				record["restored"] = true
-			}
+	// The privileged helper serves every stage and run. A per-stage restore
+	// must not remove or downgrade infrastructure needed by other journals.
+	for _, record := range reportRecords(report, "system_changes") {
+		if record["path"] == systemBinary {
+			record["retained_dependency"] = "shared privileged recovery helper"
 		}
 	}
 	active := filepath.Join(c.StateHome, "myarch-buildkit", "active-profile.json")
@@ -587,9 +633,9 @@ func RestoreContext(c *Context) error {
 			}
 		}
 	}
-	report["status"] = "restored"
+	setRecoveryStatus(report, recoveryRestored)
 	if len(failures) > 0 {
-		report["status"] = "restore_partial"
+		setRecoveryStatus(report, recoveryPartial)
 		for _, failure := range failures {
 			c.Warn(failure)
 		}
@@ -611,42 +657,49 @@ func reversedRecords(records []map[string]any) []map[string]any {
 	return out
 }
 
-func restoreFile(record map[string]any) error {
-	path := str(record["path"])
-	if err := securePath(path, true); err != nil {
-		return err
-	}
-	actual, err := FileHash(path)
+func restoreFile(value map[string]any) error {
+	record, err := parseFileRecoveryRecord(value)
 	if err != nil {
 		return err
 	}
-	if actual != "" {
-		allowed := map[string]bool{}
-		for _, key := range []string{"sha256", "pending_sha256", "previous_sha256"} {
-			if value, ok := record[key].(string); ok && value != "" {
-				allowed[value] = true
-			}
-		}
-		if len(allowed) > 0 && !allowed[actual] || len(allowed) == 0 && mapJSONNumber(record["write_journal_version"]) == 2 {
-			return fmt.Errorf("changed since setup; restore manually: %s", path)
-		}
+	if err := securePath(record.Path, true); err != nil {
+		return err
 	}
-	if backup, ok := record["backup"].(string); ok && backup != "" {
-		if err := securePath(backup, false); err != nil {
+	actual, err := FileHash(record.Path)
+	if err != nil {
+		return err
+	}
+	var original []byte
+	var mode os.FileMode
+	originalHash := ""
+	if record.Backup != "" {
+		if err := securePath(record.Backup, false); err != nil {
 			return err
 		}
-		data, err := os.ReadFile(backup)
+		original, err = os.ReadFile(record.Backup)
 		if err != nil {
 			return err
 		}
-		info, err := os.Stat(backup)
+		originalHash = hashBytes(original)
+		if record.OriginalSHA256 != "" && record.OriginalSHA256 != originalHash {
+			return fmt.Errorf("original backup changed; restore manually: %s", record.Backup)
+		}
+		info, err := os.Stat(record.Backup)
 		if err != nil {
 			return err
 		}
-		return AtomicWrite(path, data, modeValue(record["mode"], info.Mode().Perm()))
+		mode = record.mode(info.Mode())
+	}
+	// The original is a valid terminal state even when the previous process
+	// stopped after restoring bytes but before saving its completion record.
+	if !record.accepts(actual, originalHash) {
+		return fmt.Errorf("changed since setup; restore manually: %s", record.Path)
+	}
+	if record.Backup != "" {
+		return AtomicWrite(record.Path, original, mode)
 	}
 	if actual != "" {
-		return os.Remove(path)
+		return os.Remove(record.Path)
 	}
 	return nil
 }

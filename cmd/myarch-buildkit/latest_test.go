@@ -199,20 +199,9 @@ func TestFutureDMSReadsInstalledSchemaVersions(t *testing.T) {
 	r.dmsVersion, r.packageVersion = "2.1.0", "2.1.0-1"
 	root := filepath.Join(c.Home, "qml")
 	r.sourceRoot = root
+	installDMSSchemaFixture(t, root, "2.0.0")
 	storagePut(t, filepath.Join(root, "Common/SettingsData.qml"), "readonly property int settingsConfigVersion: 43")
 	storagePut(t, filepath.Join(root, "Common/SessionData.qml"), "readonly property int sessionConfigVersion: 8")
-	// Use the public settings expected by the profile with future schema numbers.
-	c.Inventory["dms_dock_configs"] = true
-	settings := "barConfigs: {}, screenPreferences: {},\n"
-	for key := range desktopSettings(c) {
-		settings += key + ": {},\n"
-	}
-	session := "dockPins: {}, wallpaperPath: '',\n"
-	for key := range DMSSession {
-		session += key + ": null,\n"
-	}
-	storagePut(t, filepath.Join(root, "Common/settings/SettingsSpec.js"), settings)
-	storagePut(t, filepath.Join(root, "Common/settings/SessionSpec.js"), session)
 	desktopStage(t, c)
 	if desktopObject(t, c.View(filepath.Join(c.ConfigHome, "dms/settings.json")))["configVersion"] != float64(43) {
 		t.Fatal("future settings version replaced with old schema")
@@ -235,19 +224,17 @@ func TestDux2SchemaIncludesSharedDefinitions(t *testing.T) {
 	r.dmsVersion, r.packageVersion = "2.0.0", "2.0.0-1"
 	root := filepath.Join(c.Home, "qml")
 	r.sourceRoot = root
-	storagePut(t, filepath.Join(root, "Common/SettingsData.qml"), "readonly property int settingsConfigVersion: 42")
-	storagePut(t, filepath.Join(root, "Common/SessionData.qml"), "readonly property int sessionConfigVersion: 7")
-	local := `dockConfigs: {}, barConfigs: {}, screenPreferences: {}, frameEnabled: {}, frameMode: {}, frameScreenPreferences: {}, launcherStyle: {}, rememberLastMode: {}, rememberLastQuery: {}, dankLauncherV2IncludeFilesInAll: {}, dankLauncherV2IncludeFoldersInAll: {}, clockDateFormat: {}, notificationHistoryEnabled: {}, soundNewNotification: {}`
-	shared := `clockFormat: {}, showSeconds: {}, weatherEnabled: {}, useAutoLocation: {}`
-	session := `doNotDisturb: {}, doNotDisturbUntil: {}, terminalOverride: {}, nightModeEnabled: {}, nightModeAutoEnabled: {}, launcherLastMode: {}, launcherLastQuery: {}, appDrawerLastMode: {}, dockPins: {}`
-	storagePut(t, filepath.Join(root, "Common/settings/SettingsSpec.js"), local)
-	storagePut(t, filepath.Join(root, "Common/settings/SessionSpec.js"), session)
-	storagePut(t, filepath.Join(root, "DCommon/Common/settings/SharedSettingsSpec.js"), shared)
+	installDMSSchemaFixture(t, root, "2.0.0")
+	sharedPath := filepath.Join(root, "DCommon/Common/settings/SharedSessionSpec.js")
+	shared := storageRead(t, sharedPath)
+	if err := os.Remove(sharedPath); err != nil {
+		t.Fatal(err)
+	}
 	storageRequireError(t, func() error {
 		_, err := VerifyDMSSchema(c)
 		return err
 	}(), "unverified")
-	storagePut(t, filepath.Join(root, "DCommon/Common/settings/SharedSessionSpec.js"), `wallpaperPath: {}`)
+	storagePut(t, sharedPath, shared)
 	if _, err := VerifyDMSSchema(c); err != nil {
 		t.Fatal(err)
 	}

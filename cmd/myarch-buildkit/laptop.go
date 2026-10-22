@@ -168,20 +168,40 @@ func PreflightLaptop(c *Context) error {
 	}
 	outputs := []string{}
 	verified := []map[string]any{}
+	rules := []map[string]any{}
 	for _, monitor := range objects(c.Inventory["monitors"]) {
 		name, _ := monitor["name"].(string)
 		if !internalOutputName.MatchString(name) {
 			continue
 		}
-		outputs = append(outputs, name)
-		width, height := mapJSONNumber(monitor["width"]), mapJSONNumber(monitor["height"])
-		if width != 0 && height != 0 {
-			dimensions, e := CompatibleScale(width, height, scale)
-			if e != nil {
-				return e
-			}
-			verified = append(verified, map[string]any{"output": name, "logical_dimensions": dimensions})
+		width, widthOK := observedNumber(monitor["width"])
+		height, heightOK := observedNumber(monitor["height"])
+		refresh, refreshOK := observedNumber(monitor["refreshRate"])
+		xNumber, xOK := observedNumber(monitor["x"])
+		yNumber, yOK := observedNumber(monitor["y"])
+		if monitor["disabled"] == true || !widthOK || !heightOK || !finiteInteger(width) || !finiteInteger(height) || width <= 0 || height <= 0 || !refreshOK || refresh <= 0 || math.IsNaN(refresh) || math.IsInf(refresh, 0) || !xOK || !yOK {
+			return fmt.Errorf("built-in display %s has no complete active mode and placement; existing display settings were preserved", name)
 		}
+		if !finiteInteger(xNumber) || !finiteInteger(yNumber) {
+			return fmt.Errorf("invalid built-in display placement: %s", name)
+		}
+		dimensions, e := CompatibleScale(width, height, scale)
+		if e != nil {
+			return e
+		}
+		// Older observations may omit rotation; only absence defaults to zero.
+		transform, transformOK := float64(0), true
+		if value, present := monitor["transform"]; present {
+			transform, transformOK = observedNumber(value)
+		}
+		if !transformOK || !finiteInteger(transform) || transform < 0 || transform > 7 {
+			return fmt.Errorf("invalid built-in display transform: %s", name)
+		}
+		mode := fmt.Sprintf("%.0fx%.0f@%s", width, height, strconv.FormatFloat(refresh, 'f', -1, 64))
+		position := fmt.Sprintf("%.0fx%.0f", xNumber, yNumber)
+		outputs = append(outputs, name)
+		rules = append(rules, map[string]any{"output": name, "mode": mode, "position": position, "transform": transform})
+		verified = append(verified, map[string]any{"output": name, "mode": mode, "position": position, "logical_dimensions": dimensions})
 	}
 	if len(outputs) == 0 {
 		return fmt.Errorf("no built-in display was identified; existing display settings were preserved")
@@ -199,8 +219,24 @@ func PreflightLaptop(c *Context) error {
 		"internal_outputs":   outputs,
 		"internal_keyboards": roles["internal"],
 		"verified_modes":     verified,
+		"monitor_rules":      rules,
 	}
 	return nil
+}
+
+func finiteInteger(value float64) bool {
+	return !math.IsNaN(value) && !math.IsInf(value, 0) && math.Trunc(value) == value
+}
+
+func observedNumber(value any) (float64, bool) {
+	switch number := value.(type) {
+	case float64:
+		return number, true
+	case int:
+		return float64(number), true
+	default:
+		return 0, false
+	}
 }
 
 func LaptopFragment(c *Context) string {
@@ -233,13 +269,22 @@ func LaptopConfigText(format string, selection map[string]any, layout string, na
 	value := strconv.FormatBool(natural)
 	scale := strconv.FormatFloat(mapJSONNumber(selection["scale"]), 'g', 17, 64)
 	lines := []string{}
+	rules := objects(selection["monitor_rules"])
+	if len(rules) == 0 || len(rules) != len(stringList(selection["internal_outputs"])) {
+		return "", fmt.Errorf("built-in display mode and placement must be verified before generating laptop settings")
+	}
+	for _, rule := range rules {
+		if !internalOutputName.MatchString(str(rule["output"])) || !regexp.MustCompile(`^[0-9]+x[0-9]+@[0-9]+(?:\.[0-9]+)?$`).MatchString(str(rule["mode"])) || !regexp.MustCompile(`^-?[0-9]+x-?[0-9]+$`).MatchString(str(rule["position"])) {
+			return "", fmt.Errorf("invalid verified built-in display rule")
+		}
+	}
 	if format == "lua" {
 		lines = append(lines, "-- Managed scrolling, built-in keyboard and display scale only.", "hl.config({input={natural_scroll="+value+",touchpad={natural_scroll="+value+"}}})")
 		for _, keyboard := range stringList(selection["internal_keyboards"]) {
 			lines = append(lines, "hl.device({name="+luaString(keyboard)+",kb_layout="+luaString(layout)+"})")
 		}
-		for _, output := range stringList(selection["internal_outputs"]) {
-			lines = append(lines, "hl.monitor({output="+luaString(output)+",mode=\"preferred\",position=\"auto\",scale="+scale+"})")
+		for _, rule := range rules {
+			lines = append(lines, "hl.monitor({output="+luaString(str(rule["output"]))+",mode="+luaString(str(rule["mode"]))+",position="+luaString(str(rule["position"]))+",scale="+scale+",transform="+strconv.FormatFloat(mapJSONNumber(rule["transform"]), 'f', 0, 64)+"})")
 		}
 	} else {
 		lines = append(lines, "# Managed scrolling, built-in keyboard and display scale only.", "input {", "  natural_scroll = "+value, "  touchpad {", "    natural_scroll = "+value, "  }", "}")
@@ -249,11 +294,8 @@ func LaptopConfigText(format string, selection map[string]any, layout string, na
 			}
 			lines = append(lines, "device {", "  name = "+keyboard, "  kb_layout = "+layout, "}")
 		}
-		for _, output := range stringList(selection["internal_outputs"]) {
-			if !internalOutputName.MatchString(output) {
-				return "", fmt.Errorf("unsupported built-in display name")
-			}
-			lines = append(lines, "monitor = "+output+", preferred, auto, "+scale)
+		for _, rule := range rules {
+			lines = append(lines, "monitor = "+str(rule["output"])+", "+str(rule["mode"])+", "+str(rule["position"])+", "+scale+", transform, "+strconv.FormatFloat(mapJSONNumber(rule["transform"]), 'f', 0, 64))
 		}
 	}
 	return strings.Join(lines, "\n") + "\n", nil

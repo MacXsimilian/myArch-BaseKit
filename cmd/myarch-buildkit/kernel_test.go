@@ -37,7 +37,7 @@ func newKernelFixture(t *testing.T) *kernelFixture {
 	c.Settings = DefaultSettings()
 	c.Settings.KernelChannel = "rc"
 	c.Quiet = true
-	f.manager = kernelManager{c, t.TempDir()}
+	f.manager = kernelManager{c: c, root: t.TempDir(), imageHash: FileHash}
 	for _, pkg := range []string{"linux-cachyos-lts", "linux-cachyos-rc"} {
 		entry := kernelEntry{ID: pkg + ".conf", Type: "type1", Root: "/boot", Linux: "/vmlinuz-" + pkg, Initrd: []string{"/initramfs-" + pkg + ".img"}, Default: pkg == "linux-cachyos-lts"}
 		f.entries = append(f.entries, entry)
@@ -419,5 +419,93 @@ func TestKernelRegisteredDKMSBlocksBootSelection(t *testing.T) {
 		if cmd.Args[0] == "sudo" {
 			t.Fatal("boot selection changed", cmd)
 		}
+	}
+}
+
+func stableKernelFixture(t *testing.T, separateFallback bool) *kernelFixture {
+	t.Helper()
+	f := newKernelFixture(t)
+	f.manager.c.Settings.KernelChannel = "stable"
+	f.packages = map[string]string{"linux-cachyos": "6.12.1-1", "linux-cachyos-headers": "6.12.1-1"}
+	f.versions = map[string]string{"linux-cachyos": "6.12.1-1", "linux-cachyos-headers": "6.12.1-1"}
+	f.releases["linux-cachyos"] = "6.12.1-cachyos"
+	f.entries = nil
+	names := []string{"linux-cachyos"}
+	if separateFallback {
+		f.packages["linux"] = "6.12.1-1"
+		f.releases["linux"] = "6.12.1-arch"
+		names = append(names, "linux")
+	}
+	for _, pkg := range names {
+		entry := kernelEntry{ID: pkg + ".conf", Type: "type1", Root: "/boot", Linux: "/vmlinuz-" + pkg, Initrd: []string{"/initramfs-" + pkg + ".img"}, Default: pkg == "linux"}
+		f.entries = append(f.entries, entry)
+		storagePut(t, f.manager.path(filepath.Join(entry.Root, entry.Linux)), pkg)
+		storagePut(t, f.manager.path(filepath.Join(entry.Root, entry.Initrd[0])), "initramfs")
+		storagePut(t, f.manager.path("/usr/lib/modules/"+f.releases[pkg]+"/vmlinuz"), pkg)
+	}
+	base := f.runner.reply
+	f.runner.reply = func(cmd Command) (CommandResult, error) {
+		if packageCmd(cmd) == "bootctl list --json=short --no-pager" {
+			data, err := json.Marshal(f.entries)
+			return CommandResult{Stdout: string(data)}, err
+		}
+		return base(cmd)
+	}
+	return f
+}
+
+func TestStableKernelRequiresDistinctFallbackBeforeAnyMutation(t *testing.T) {
+	for _, operation := range []string{"upgrade", "check", "once", "promote"} {
+		t.Run(operation, func(t *testing.T) {
+			f := stableKernelFixture(t, false)
+			var err error
+			switch operation {
+			case "upgrade":
+				err = f.manager.upgrade()
+			case "check":
+				err = f.manager.check()
+			default:
+				err = f.manager.boot(operation)
+			}
+			if err == nil || !strings.Contains(err.Error(), "distinct") {
+				t.Fatalf("expected a separate fallback requirement, got %v", err)
+			}
+			for _, command := range f.runner.calls {
+				if command.Args[0] == "sudo" {
+					t.Fatalf("changed system before validating fallback: %v", command.Args)
+				}
+			}
+		})
+	}
+}
+
+func TestStableKernelUsesAlternativeFallbackThroughUpgradeAndTrial(t *testing.T) {
+	f := stableKernelFixture(t, true)
+	if err := f.manager.upgrade(); err != nil {
+		t.Fatal(err)
+	}
+	record := object(f.manager.c.Report["kernel"])
+	if record["fallback"] != "linux" || record["fallback_entry"] == record["entry"] {
+		t.Fatalf("target was not isolated from fallback: %v", record)
+	}
+	if err := f.manager.check(); err != nil {
+		t.Fatal(err)
+	}
+	if object(f.manager.c.Report["kernel"])["fallback"] != "linux" {
+		t.Fatal("check selected a different fallback")
+	}
+	f.runner.calls = nil
+	if err := f.manager.boot("once"); err != nil {
+		t.Fatal(err)
+	}
+	changes := []string{}
+	for _, command := range f.runner.calls {
+		if command.Args[0] == "sudo" {
+			changes = append(changes, packageCmd(command))
+		}
+	}
+	want := "sudo bootctl set-default linux.conf\nsudo bootctl set-oneshot linux-cachyos.conf"
+	if strings.Join(changes, "\n") != want {
+		t.Fatalf("trial must retain separate fallback: %v", changes)
 	}
 }

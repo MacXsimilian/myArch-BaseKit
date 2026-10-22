@@ -175,10 +175,6 @@ func desktopWriteObject(c *Context, path string, value map[string]any, mode os.F
 	return c.Write(path, append(raw, '\n'), mode)
 }
 
-func mapKeyPresent(source, key string) bool {
-	return regexp.MustCompile(`\b` + regexp.QuoteMeta(key) + `\s*:`).MatchString(source)
-}
-
 func DesktopFormat(c *Context) (string, string, error) {
 	main, ok := c.Inventory["active_config"].(string)
 	if !ok || main == "" {
@@ -195,16 +191,6 @@ func DesktopFormat(c *Context) (string, string, error) {
 }
 
 func DesktopPins(c *Context) ([]string, error) {
-	roots := []string{filepath.Join(c.DataHome, "applications")}
-	dirs := os.Getenv("XDG_DATA_DIRS")
-	if dirs == "" {
-		dirs = "/usr/local/share:/usr/share"
-	}
-	for _, directory := range strings.Split(dirs, ":") {
-		if directory != "" {
-			roots = append(roots, filepath.Join(directory, "applications"))
-		}
-	}
 	result := []string{}
 	for _, choices := range [][]string{
 		{"com.mitchellh.ghostty", "ghostty"},
@@ -213,13 +199,10 @@ func DesktopPins(c *Context) ([]string, error) {
 	} {
 		found := ""
 		for _, choice := range choices {
-			for _, root := range roots {
-				if exists(filepath.Join(root, choice+".desktop")) {
-					found = choice
-					break
-				}
-			}
-			if found != "" {
+			// Discovery respects user tombstones. NoDisplay is permitted: a
+			// hidden menu item can still be launched by an explicit dock pin.
+			if _, err := discoverDesktop(c, choice+".desktop"); err == nil {
+				found = choice
 				break
 			}
 		}
@@ -315,13 +298,12 @@ func DesktopAutostarts(c *Context) (map[string]string, error) {
 	if dirs == "" {
 		dirs = "/etc/xdg"
 	}
-	roots := []string{}
+	roots := []string{filepath.Join(c.ConfigHome, "autostart")}
 	for _, directory := range strings.Split(dirs, ":") {
-		if directory != "" {
+		if filepath.IsAbs(directory) {
 			roots = append(roots, filepath.Join(directory, "autostart"))
 		}
 	}
-	roots = append(roots, filepath.Join(c.ConfigHome, "autostart"))
 	paths := map[string]string{}
 	for _, root := range roots {
 		entries, err := filepath.Glob(filepath.Join(root, "*.desktop"))
@@ -329,7 +311,10 @@ func DesktopAutostarts(c *Context) (map[string]string, error) {
 			return nil, err
 		}
 		for _, path := range entries {
-			paths[filepath.Base(path)] = path
+			name := filepath.Base(path)
+			if _, found := paths[name]; !found {
+				paths[name] = path
+			}
 		}
 	}
 	result := map[string]string{}
@@ -353,6 +338,9 @@ func DesktopAutostarts(c *Context) (map[string]string, error) {
 					entry[strings.ToLower(strings.TrimSpace(pair[0]))] = strings.TrimSpace(pair[1])
 				}
 			}
+		}
+		if err := scanner.Err(); err != nil {
+			return nil, fmt.Errorf("read autostart %s: %w", path, err)
 		}
 		if strings.EqualFold(entry["hidden"], "true") {
 			continue

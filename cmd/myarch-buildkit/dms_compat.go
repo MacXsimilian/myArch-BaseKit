@@ -103,28 +103,50 @@ func inspectDMSSchema(c *Context, root string) bool {
 			}
 		}
 	}
-	c.Inventory["dms_dock_configs"] = mapKeyPresent(settingsSpec, "dockConfigs")
-	for key := range desktopSettings(c) {
-		if !mapKeyPresent(settingsSpec, key) {
+	settingsSpec, sessionSpec = dmsUncomment(settingsSpec), dmsUncomment(sessionSpec)
+	c.Inventory["dms_dock_configs"] = dmsDefault(settingsSpec, "dockConfigs") != ""
+	for key, value := range desktopSettings(c) {
+		if !dmsMatchesDefault(settingsSpec, key, value) {
 			return false
 		}
 	}
-	for _, key := range []string{"barConfigs", "screenPreferences"} {
-		if !mapKeyPresent(settingsSpec, key) {
+	for key, value := range map[string]any{"barConfigs": []any{}, "screenPreferences": map[string]any{}} {
+		if !dmsMatchesDefault(settingsSpec, key, value) {
 			return false
 		}
 	}
-	for key := range DMSSession {
-		if !mapKeyPresent(sessionSpec, key) {
+	barDefault := strings.TrimSpace(dmsDefault(settingsSpec, "barConfigs"))
+	if !dmsMatchesRecord(strings.TrimSpace(barDefault[1:]), DMSBar) {
+		return false
+	}
+	if boolValue(c.Inventory["dms_dock_configs"]) {
+		dockSource, err := desktopSafeText(filepath.Join(root, "Common/settings/DockConfig.js"), false)
+		dockSource = dmsUncomment(dockSource)
+		start := regexp.MustCompile(`\bfunction\s+create\s*\([^)]*\)\s*\{\s*return\s*\{`).FindStringIndex(dockSource)
+		if err != nil || start == nil {
+			return false
+		}
+		dock := desktopSettings(c)["dockConfigs"].([]map[string]any)[0]
+		// id and name are parameters, not literals in DockConfig.create.
+		delete(dock, "id")
+		delete(dock, "name")
+		if !dmsMatchesRecord(dockSource[start[1]-1:], dock) {
+			return false
+		}
+	}
+	for key, value := range DMSSession {
+		if !dmsMatchesDefault(sessionSpec, key, value) {
 			return false
 		}
 	}
 	pinKey := "pinnedApps"
+	var pins any = []any{}
 	if boolValue(c.Inventory["dms_dock_configs"]) {
 		pinKey = "dockPins"
+		pins = map[string]any{}
 	}
-	for _, key := range []string{pinKey, "wallpaperPath"} {
-		if !mapKeyPresent(sessionSpec, key) {
+	for key, value := range map[string]any{pinKey: pins, "wallpaperPath": ""} {
+		if !dmsMatchesDefault(sessionSpec, key, value) {
 			return false
 		}
 	}

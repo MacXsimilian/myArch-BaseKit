@@ -40,6 +40,7 @@ type systemJournal struct {
 	SHA256         string         `json:"sha256"`
 	PendingSHA256  string         `json:"pending_sha256,omitempty"`
 	PreviousSHA256 string         `json:"previous_sha256,omitempty"`
+	OriginalSHA256 string         `json:"original_sha256,omitempty"`
 	RunID          string         `json:"run_id"`
 	Existed        bool           `json:"existed"`
 	Restored       bool           `json:"restored,omitempty"`
@@ -114,6 +115,12 @@ func rootAtomic(path string, data []byte, mode os.FileMode, uid, gid int) error 
 	name := f.Name()
 	defer os.Remove(name)
 	if _, err = f.Write(data); err == nil {
+		err = f.Chown(uid, gid)
+	}
+	if err == nil {
+		err = f.Chmod(mode)
+	}
+	if err == nil {
 		err = f.Sync()
 	}
 	if closeErr := f.Close(); err == nil {
@@ -122,13 +129,15 @@ func rootAtomic(path string, data []byte, mode os.FileMode, uid, gid int) error 
 	if err != nil {
 		return err
 	}
-	if err = os.Chown(name, uid, gid); err != nil {
+	if err = os.Rename(name, path); err != nil {
 		return err
 	}
-	if err = os.Chmod(name, mode); err != nil {
+	dir, err := os.Open(filepath.Dir(path))
+	if err != nil {
 		return err
 	}
-	return os.Rename(name, path)
+	defer dir.Close()
+	return dir.Sync()
 }
 
 func rootJournalPaths(root string, uid int, runID, path string) (string, string, error) {
@@ -208,6 +217,7 @@ func privilegedWrite(root string, uid int, p systemPayload) (systemJournal, erro
 			stat := info.Sys().(*syscall.Stat_t)
 			journal.Existed = true
 			journal.Backup = backup
+			journal.OriginalSHA256 = systemDigest(old)
 			journal.Previous = map[string]any{"mode": uint32(info.Mode().Perm()), "uid": stat.Uid, "gid": stat.Gid}
 			if p.NewInstall {
 				if p.Path != systemBinary || !bytes.Equal(old, p.Data) {
@@ -215,6 +225,7 @@ func privilegedWrite(root string, uid int, p systemPayload) (systemJournal, erro
 				}
 				journal.Existed = false
 				journal.Backup = ""
+				journal.OriginalSHA256 = ""
 				journal.Previous = nil
 			} else if err = rootAtomic(backup, old, 0600, 0, 0); err != nil {
 				return journal, err
@@ -267,15 +278,13 @@ func privilegedRestore(root string, uid int, p systemPayload) error {
 	if j.Restored {
 		return nil
 	}
-	destination := rooted(root, p.Path)
-	if current, readErr := os.ReadFile(destination); readErr == nil {
-		digest := systemDigest(current)
-		if digest != j.SHA256 && digest != j.PendingSHA256 && digest != j.PreviousSHA256 {
-			return fmt.Errorf("file changed since setup; restore manually: %s", p.Path)
+	for _, hash := range []string{j.SHA256, j.PendingSHA256, j.PreviousSHA256, j.OriginalSHA256} {
+		if !validRecoveryHash(hash) {
+			return fmt.Errorf("invalid system recovery checksum")
 		}
-	} else if !errors.Is(readErr, os.ErrNotExist) {
-		return readErr
 	}
+	var original []byte
+	originalHash := ""
 	if j.Existed {
 		_, expectedBackup, err := rootJournalPaths(root, uid, p.RunID, p.Path)
 		if err != nil {
@@ -287,14 +296,29 @@ func privilegedRestore(root string, uid int, p systemPayload) error {
 		if err = safeRootPath(root, strings.TrimPrefix(j.Backup, root), false); err != nil {
 			return err
 		}
-		old, err := os.ReadFile(j.Backup)
+		original, err = os.ReadFile(j.Backup)
 		if err != nil {
 			return err
 		}
+		originalHash = systemDigest(original)
+		if j.OriginalSHA256 != "" && j.OriginalSHA256 != originalHash {
+			return fmt.Errorf("original system backup changed; restore manually: %s", p.Path)
+		}
+	}
+	destination := rooted(root, p.Path)
+	if current, readErr := os.ReadFile(destination); readErr == nil {
+		digest := systemDigest(current)
+		if digest != j.SHA256 && digest != j.PendingSHA256 && digest != j.PreviousSHA256 && digest != originalHash {
+			return fmt.Errorf("file changed since setup; restore manually: %s", p.Path)
+		}
+	} else if !errors.Is(readErr, os.ErrNotExist) {
+		return readErr
+	}
+	if j.Existed {
 		mode := os.FileMode(mapJSONNumber(j.Previous["mode"]))
 		owner := int(mapJSONNumber(j.Previous["uid"]))
 		group := int(mapJSONNumber(j.Previous["gid"]))
-		if err = rootAtomic(destination, old, mode, owner, group); err != nil {
+		if err = rootAtomic(destination, original, mode, owner, group); err != nil {
 			return err
 		}
 	} else if err = os.Remove(destination); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -339,6 +363,8 @@ func SystemCommand(args []string) error {
 		return fmt.Errorf("internal command expects one JSON payload")
 	}
 	switch args[0] {
+	case "internal-capabilities":
+		return json.NewEncoder(os.Stdout).Encode(currentRecoveryCapabilities())
 	case "internal-write":
 		j, err := privilegedWrite("", uid, p)
 		if err != nil {
@@ -437,15 +463,101 @@ func systemWriteReady(c *Context, path string, data []byte, mode os.FileMode, ne
 func RestoreSystem(c *Context, record map[string]any) error {
 	path, _ := record["path"].(string)
 	runID, _ := record["run_id"].(string)
+	if runID != "" && (!systemAllowed(path) || !validRunID(runID)) || runID == "" && !legacySystemAllowed(path) {
+		return fmt.Errorf("invalid system recovery record")
+	}
+	if path == systemBinary {
+		record["retained_dependency"] = "shared privileged recovery helper"
+		return nil
+	}
+	if err := ensureRecoveryHelper(c); err != nil {
+		return err
+	}
 	if runID == "" {
-		if err := bootstrapRootBinary(c); err != nil {
-			return err
-		}
 		_, err := rootOperation(c, "internal-restore-legacy", systemPayload{LegacyRecord: record, LegacyRunDir: c.RunDir})
 		return err
 	}
 	_, err := rootOperation(c, "internal-restore", systemPayload{Path: path, RunID: runID})
 	return err
+}
+
+type recoveryCapabilities struct {
+	ProtocolVersion int      `json:"protocol_version"`
+	Features        []string `json:"features"`
+}
+
+const idempotentRecoveryFeature = "idempotent-file-restore"
+
+func currentRecoveryCapabilities() recoveryCapabilities {
+	return recoveryCapabilities{ProtocolVersion: 1, Features: []string{idempotentRecoveryFeature}}
+}
+
+func recoveryHelperCapable(c *Context) (bool, error) {
+	result, err := rootOperation(c, "internal-capabilities", systemPayload{})
+	if err != nil {
+		// Releases before the capabilities protocol report this exact error.
+		// Other failures are not permission to replace an installed helper.
+		message := strings.TrimPrefix(strings.TrimSpace(result.Stderr), "ERROR: ")
+		if result.Code != 0 && message == "unknown internal command" {
+			return false, nil
+		}
+		return false, err
+	}
+	var capabilities recoveryCapabilities
+	if json.Unmarshal([]byte(result.Stdout), &capabilities) != nil || capabilities.ProtocolVersion < 1 || capabilities.Features == nil {
+		return false, fmt.Errorf("invalid privileged recovery capabilities; installed helper was preserved")
+	}
+	// Feature negotiation keeps a capable newer helper intact even when the
+	// executable performing recovery is an older build.
+	return contains(capabilities.Features, idempotentRecoveryFeature), nil
+}
+
+// Recovery support has its own persistent journal. Installing a missing or
+// incapable helper must never replace an original stage's backup identity.
+func ensureRecoveryHelper(c *Context) error {
+	if c.CheckOnly {
+		return fmt.Errorf("a check cannot install recovery support")
+	}
+	present := c.Try("sudo", "-n", "/usr/bin/test", "-e", systemBinary)
+	if present.Code == 0 {
+		if err := verifyInstalledRootBinary(c); err != nil {
+			return err
+		}
+		capable, err := recoveryHelperCapable(c)
+		if err != nil {
+			return err
+		}
+		if capable {
+			c.rootBinaryReady = true
+			return nil
+		}
+	} else if present.Code != 1 {
+		return fmt.Errorf("cannot inspect privileged recovery helper: %s", strings.TrimSpace(present.Stderr))
+	}
+	support := *c
+	support.RunDir = filepath.Join(stateRoot(c), "support", "privileged-helper")
+	support.ReportPath = filepath.Join(support.RunDir, "profile-report.json")
+	support.ReportScope = ""
+	support.Pending = nil
+	support.rootBinaryReady = false
+	support.Report = map[string]any{"schema_version": 1, "purpose": "shared privileged recovery helper"}
+	if exists(support.ReportPath) {
+		if err := ReadJSON(support.ReportPath, &support.Report); err != nil {
+			return err
+		}
+	}
+	if err := bootstrapRootBinary(&support); err != nil {
+		return err
+	}
+	capable, err := recoveryHelperCapable(c)
+	if err != nil {
+		return err
+	}
+	if !capable {
+		return fmt.Errorf("installed recovery helper lacks idempotent file restoration")
+	}
+	c.rootBinaryReady = true
+	return nil
 }
 
 func bootstrapRootBinary(c *Context) error {

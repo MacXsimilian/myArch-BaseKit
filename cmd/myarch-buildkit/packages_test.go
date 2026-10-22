@@ -441,6 +441,7 @@ func TestDependencyRefusalRetainsDuplicateWithoutCascade(t *testing.T) {
 		"gnote":                  true,
 	}
 	c.Options.KeepTerminal = true
+	storagePut(t, filepath.Join(c.ConfigHome, "Code/User/settings.json"), `{"editor.fontFamily":"JetBrainsMono Nerd Font Mono","terminal.integrated.fontFamily":"JetBrainsMono Nerd Font Mono"}`)
 	runner := &packageTestRunner{reply: func(command Command) (CommandResult, error) {
 		args := command.Args
 		line := packageCmd(command)
@@ -482,6 +483,9 @@ func TestDependencyRefusalRetainsDuplicateWithoutCascade(t *testing.T) {
 		}
 		if args[0] == "fc-match" {
 			return CommandResult{Stdout: BuildkitFont}, nil
+		}
+		if args[0] == "ghostty" {
+			return CommandResult{Stdout: "font-family = " + BuildkitFont}, nil
 		}
 		if args[0] == "systemctl" {
 			return CommandResult{Code: 3}, nil

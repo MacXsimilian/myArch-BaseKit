@@ -145,6 +145,24 @@ func checkDefaultApps(v *planView, report map[string]any, details bool) {
 		if details && defaults["terminal_command"] != "" {
 			v.field("Terminal command", strings.ReplaceAll(defaults["terminal_command"], "\n", " "))
 		}
+		if details {
+			for _, item := range [][2]string{
+				{"Installed font", "font_installed"},
+				{"Ghostty font", "ghostty_font"},
+				{"VS Code editor", "vscode_editor_font"},
+				{"VS Code terminal", "vscode_terminal_font"},
+			} {
+				if value, present := defaults[item[1]]; present {
+					if value == "" {
+						value = "Not verified"
+					}
+					v.field(item[0], value)
+				}
+			}
+			if scope := defaults["vscode_font_scope"]; scope != "" {
+				v.note("VS Code font check: " + scope)
+			}
+		}
 	}
 
 }

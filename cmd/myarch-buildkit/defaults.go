@@ -600,11 +600,7 @@ func CheckDefaults(c *Context) error {
 			failures = append(failures, item[0]+" default")
 		}
 	}
-	font := c.Try("fc-match", "-f", "%{family}\n", BuildkitFont)
-	checks["font"] = strings.TrimSpace(font.Stdout)
-	if font.Code != 0 || !strings.Contains(checks["font"], BuildkitFont) {
-		failures = append(failures, "monospace font")
-	}
+	failures = append(failures, checkDefaultFonts(c, checks)...)
 	command := c.Try("xdg-terminal-exec", "--print-cmd")
 	checks["terminal_command"] = strings.TrimSpace(command.Stdout)
 	if c.Report == nil {

@@ -548,8 +548,12 @@ func RunStages(root *Context, selected []string) (int, error) {
 	root.ReportScope = "_run"
 	effective := root.ReportPath
 	executable, _ := currentExecutable()
-	hash, _ := FileHash(executable)
-	root.Report["provenance"] = map[string]any{"build": BuildID, "executable": executable, "sha256": hash}
+	hash, hashErr := runningExecutableHash()
+	provenance := map[string]any{"build": BuildID, "executable": executable, "sha256": hash}
+	if hashErr != nil {
+		provenance["hash_error"] = hashErr.Error()
+	}
+	root.Report["provenance"] = provenance
 	summary := map[string]any{
 		"format":          RunReportFormat,
 		"schema_version":  RunReportSchemaVersion,
@@ -788,6 +792,12 @@ type printedError struct{ error }
 func (e *printedError) Unwrap() error { return e.error }
 
 func dispatch(args []string, runner Runner) (int, error) {
+	return dispatchWithPlatform(args, runner, CheckPlatform)
+}
+
+// Keep platform detection injectable so dispatch/recovery tests can use their
+// real files and journals without invoking services on the developer's host.
+func dispatchWithPlatform(args []string, runner Runner, platformCheck func(*Context, bool) error) (code int, err error) {
 	if len(args) > 0 && strings.HasPrefix(args[0], "internal-") {
 		return 0, SystemCommand(args)
 	}
@@ -817,13 +827,28 @@ func dispatch(args []string, runner Runner) (int, error) {
 	if err != nil {
 		return 2, err
 	}
+	// Once check's output format is known, initialization failures obey the
+	// same single-document JSON contract as failures inside the checks.
+	defer func() {
+		var shown *printedError
+		if err != nil && o.Command == "check" && o.JSON && !errors.As(err, &shown) {
+			c := &Context{Report: map[string]any{
+				"schema_version": 1,
+				"status":         "incomplete",
+				"check_error":    err.Error(),
+			}}
+			code, err = printCheck(c, o, err)
+		}
+	}()
 	if o.Help {
 		fmt.Print(helpText)
 		return 0, nil
 	}
 	if o.Version {
-		path, _ := currentExecutable()
-		hash, _ := FileHash(path)
+		hash, err := runningExecutableHash()
+		if err != nil {
+			return 2, err
+		}
 		fmt.Println("myarch-buildkit", BuildID)
 		fmt.Println("Executable SHA256:", hash)
 		return 0, nil
@@ -833,18 +858,28 @@ func dispatch(args []string, runner Runner) (int, error) {
 		fmt.Println(string(data))
 		return 0, nil
 	}
+	settings := DefaultSettings()
 	settingsPath := o.SettingsPath
-	if settingsPath == "" {
-		home, _ := os.UserHomeDir()
-		config, _ := xdgPath("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
-		candidate := filepath.Join(config, "myarch-buildkit/settings.json")
-		if exists(candidate) {
-			settingsPath = candidate
+	recovering := o.RestoreStage != "" || o.RestoreProfile != "" || o.CancelPending != ""
+	if !recovering {
+		if settingsPath == "" {
+			home, homeErr := os.UserHomeDir()
+			if homeErr != nil {
+				return 2, homeErr
+			}
+			config, configErr := xdgPath("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+			if configErr != nil {
+				return 2, configErr
+			}
+			candidate := filepath.Join(config, "myarch-buildkit/settings.json")
+			if exists(candidate) {
+				settingsPath = candidate
+			}
 		}
-	}
-	settings, err := LoadSettings(settingsPath)
-	if err != nil {
-		return 2, err
+		settings, err = LoadSettings(settingsPath)
+		if err != nil {
+			return 2, err
+		}
 	}
 	if o.LaptopScale != "" {
 		settings.Laptop.InternalScale = o.LaptopScale
@@ -857,13 +892,13 @@ func dispatch(args []string, runner Runner) (int, error) {
 	if err != nil {
 		return 2, err
 	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		return 2, err
-	}
-	runDir := filepath.Join(cwd, "myarch-buildkit-runs", time.Now().UTC().Format("20060102-150405")+fmt.Sprintf("-%d", os.Getpid()))
-	if o.Command == "check" {
-		runDir = ""
+	runDir := ""
+	if o.Command != "check" && !recovering && o.KernelBoot == "" {
+		cwd, cwdErr := os.Getwd()
+		if cwdErr != nil {
+			return 2, cwdErr
+		}
+		runDir = filepath.Join(cwd, "myarch-buildkit-runs", time.Now().UTC().Format("20060102-150405")+fmt.Sprintf("-%d", os.Getpid()))
 	}
 	if o.RestoreStage != "" {
 		runDir = o.StageRunDir
@@ -875,7 +910,7 @@ func dispatch(args []string, runner Runner) (int, error) {
 	if err != nil {
 		return 2, err
 	}
-	err = CheckPlatform(c, o.Command != "check" && o.CancelPending == "")
+	err = platformCheck(c, o.Command != "check" && o.CancelPending == "")
 	if o.Command == "check" {
 		c.CheckOnly = true
 		if err == nil {

@@ -39,7 +39,7 @@ type StageFile struct {
 
 type Manifest struct {
 	Version     int            `json:"version"`
-	Status      string         `json:"status"`
+	Status      manifestStatus `json:"status"`
 	Phase       string         `json:"phase"`
 	Report      string         `json:"report"`
 	ReportScope string         `json:"report_scope,omitempty"`
@@ -201,7 +201,7 @@ func (c *Context) StartStaging() error {
 	}
 	manifest := Manifest{
 		Version:     version,
-		Status:      "building",
+		Status:      manifestBuilding,
 		Report:      c.ReportPath,
 		ReportScope: c.ReportScope,
 		Files:       []StageFile{},
@@ -211,7 +211,7 @@ func (c *Context) StartStaging() error {
 		if err := ReadJSON(manifestPath(c), &manifest); err != nil {
 			return err
 		}
-		if (manifest.Version != version && manifest.Version != 3) || manifest.Status != "building" && manifest.Status != "pending" {
+		if (manifest.Version != version && manifest.Version != 3) || manifest.Status != manifestBuilding && manifest.Status != manifestPending {
 			return fmt.Errorf("this stage was already applied; create a fresh run")
 		}
 		if manifest.Report != c.ReportPath || manifest.ReportScope != c.ReportScope {
@@ -390,7 +390,7 @@ func (c *Context) Publish(phase string) error {
 		}
 	}
 	c.Pending.Phase = phase
-	c.Pending.Status = "pending"
+	c.Pending.Status = manifestPending
 	if err = WriteJSON(manifestPath(c), c.Pending); err != nil {
 		return err
 	}
@@ -629,7 +629,7 @@ func validatePlans(c *Context, items []QueueItem) ([]loginPlan, error) {
 		if err != nil {
 			return nil, err
 		}
-		if (manifest.Version != 1 && manifest.Version != 2 && manifest.Version != 3) || manifest.Status != "pending" || manifest.Phase != item.Phase {
+		if (manifest.Version != 1 && manifest.Version != 2 && manifest.Version != 3) || manifest.Status != manifestPending || manifest.Phase != item.Phase {
 			return nil, fmt.Errorf("pending bundle is not ready: %s", item.Manifest)
 		}
 		if (manifest.Version == 1 || (manifest.Version == 3 && manifest.ReportScope == "")) && (manifest.Report != filepath.Join(filepath.Dir(item.Manifest), "profile-report.json") || manifest.ReportScope != "" || item.Report != "" || item.ReportScope != "") {
@@ -818,6 +818,7 @@ func commitChange(c *Context, plan *loginPlan, path string, data []byte, mode os
 		}
 		record["backup"] = saved
 		record["mode"] = int(info.Mode().Perm())
+		record["original_sha256"] = oldHash
 	}
 	appendRecord(plan.Report, "file_changes", record)
 	if err = WriteProfileReport(plan.Manifest.Report, plan.Manifest.ReportScope, plan.Report); err != nil {
@@ -861,7 +862,7 @@ func ApplyPending(c *Context) error {
 		pending := object(plan.Report["pending_configuration"])
 		pending["status"] = "applying"
 		plan.Report["pending_configuration"] = pending
-		plan.Manifest.Status = "applying"
+		plan.Manifest.Status = manifestApplying
 		if err = WriteJSON(plan.Path, plan.Manifest); err != nil {
 			return err
 		}
@@ -919,7 +920,7 @@ func ApplyPending(c *Context) error {
 		if err = WriteProfileReport(plan.Manifest.Report, plan.Manifest.ReportScope, plan.Report); err != nil {
 			return err
 		}
-		plan.Manifest.Status = "applied"
+		plan.Manifest.Status = manifestApplied
 		if err = WriteJSON(plan.Path, plan.Manifest); err != nil {
 			return err
 		}
@@ -965,7 +966,7 @@ func cancelPending(c *Context) error {
 		if err = ReadJSON(own, &manifest); err != nil {
 			return err
 		}
-		manifest.Status = "cancelled"
+		manifest.Status = manifestCancelled
 		if err = WriteJSON(own, manifest); err != nil {
 			return err
 		}

@@ -47,6 +47,9 @@ type kernelManager struct {
 	c *Context
 	// root is / in production; tests use an isolated filesystem.
 	root string
+	// Tests with user-owned image fixtures supply a reader explicitly. Production
+	// always uses the separate root-owned image reader, never the user-file guard.
+	imageHash func(string) (string, error)
 }
 
 func (k kernelManager) path(path string) string {
@@ -205,9 +208,9 @@ func uniqueStrings(values []string) []string {
 	return result
 }
 
-func (k kernelManager) fallback(packages map[string]string, entries []kernelEntry) (string, kernelEntry, error) {
+func (k kernelManager) fallback(packages map[string]string, entries []kernelEntry, target string) (string, kernelEntry, error) {
 	for _, pkg := range []string{"linux-cachyos-lts", "linux-lts", "linux-cachyos", "linux"} {
-		if packages[pkg] == "" {
+		if pkg == target || packages[pkg] == "" {
 			continue
 		}
 		entry, err := entryFor(entries, pkg)
@@ -215,7 +218,7 @@ func (k kernelManager) fallback(packages map[string]string, entries []kernelEntr
 			return pkg, entry, nil
 		}
 	}
-	return "", kernelEntry{}, errors.New("no validated stable/LTS fallback; install and boot a stable or LTS kernel with a standard boot entry first")
+	return "", kernelEntry{}, errors.New("no validated stable/LTS fallback distinct from the selected kernel; install and boot a separate stable or LTS kernel with a standard boot entry first")
 }
 
 // Prebuilt drivers must follow the installed driver family. DKMS is blocked
@@ -370,11 +373,15 @@ func (k kernelManager) verifyKernel(pkg string, entry kernelEntry, suffixes []st
 	}
 	packaged := k.path("/usr/lib/modules/" + release + "/vmlinuz")
 	boot := k.path(filepath.Join(entry.Root, entry.Linux))
-	packagedHash, err := FileHash(packaged)
+	hashImage := k.imageHash
+	if hashImage == nil {
+		hashImage = trustedKernelImageHash
+	}
+	packagedHash, err := hashImage(packaged)
 	if err != nil {
 		return "", err
 	}
-	bootHash, err := FileHash(boot)
+	bootHash, err := hashImage(boot)
 	if err != nil || bootHash != packagedHash {
 		return "", fmt.Errorf("boot image for %s does not match installed kernel; repair package hooks before reboot", pkg)
 	}
@@ -390,7 +397,7 @@ func (k kernelManager) verifyKernel(pkg string, entry kernelEntry, suffixes []st
 	return release, nil
 }
 
-func UpgradeKernel(c *Context) error { return (kernelManager{c, "/"}).upgrade() }
+func UpgradeKernel(c *Context) error { return (kernelManager{c: c, root: "/"}).upgrade() }
 func (k kernelManager) upgrade() error {
 	if k.c.CheckOnly || k.c.Options.DryRun || k.c.Options.Check {
 		return errors.New("kernel changes are unavailable in read-only mode")
@@ -414,7 +421,7 @@ func (k kernelManager) upgrade() error {
 	if err != nil {
 		return err
 	}
-	fallback, entry, err := k.fallback(installed, entries)
+	fallback, entry, err := k.fallback(installed, entries, target)
 	if err != nil {
 		return err
 	}
@@ -511,7 +518,7 @@ func (k kernelManager) upgrade() error {
 	return k.c.Save()
 }
 
-func CheckKernel(c *Context) error { return (kernelManager{c, "/"}).check() }
+func CheckKernel(c *Context) error { return (kernelManager{c: c, root: "/"}).check() }
 
 func (k kernelManager) check() error {
 	c := k.c
@@ -560,7 +567,7 @@ func (k kernelManager) check() error {
 	if err != nil {
 		return err
 	}
-	fallback, entry, err := k.fallback(installed, entries)
+	fallback, entry, err := k.fallback(installed, entries, target)
 	if err != nil {
 		return err
 	}
@@ -585,7 +592,9 @@ func (k kernelManager) check() error {
 	return nil
 }
 
-func KernelBoot(c *Context, action string) error { return (kernelManager{c, "/"}).boot(action) }
+func KernelBoot(c *Context, action string) error {
+	return (kernelManager{c: c, root: "/"}).boot(action)
+}
 func (k kernelManager) boot(action string) error {
 	if k.c.CheckOnly || k.c.Options.DryRun || k.c.Options.Check {
 		return errors.New("boot selection is unavailable in read-only mode")
@@ -615,7 +624,7 @@ func (k kernelManager) boot(action string) error {
 	if err != nil {
 		return err
 	}
-	fallback, fallbackEntry, err := k.fallback(packages, entries)
+	fallback, fallbackEntry, err := k.fallback(packages, entries, target)
 	if err != nil {
 		return err
 	}
@@ -657,7 +666,7 @@ func (k kernelManager) boot(action string) error {
 // A preview uses local package databases only; it does not refresh mirrors,
 // create reports, request sudo, or validate a boot that has not happened yet.
 func kernelPlanObservation(c *Context) string {
-	k := kernelManager{c, "/"}
+	k := kernelManager{c: c, root: "/"}
 	v := &planView{}
 	v.section("Local kernel inventory")
 	if running, err := k.query("uname", "-r"); err == nil {
